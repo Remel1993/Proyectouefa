@@ -442,7 +442,15 @@ export const TrainingDrillModal: React.FC<TrainingDrillModalProps> = ({
                     {drillOutcome.type?.includes('injury') && <AlertTriangle size={14} className="text-red-400" />}
                     {drillOutcome.title}
                   </h4>
-                  <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-black/40 text-amber-300 border border-white/10">
+                  <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-black/40 border border-white/10 ${
+                    drillOutcome.peGained > 0
+                      ? 'text-emerald-400 border-emerald-500/30'
+                      : drillOutcome.type?.includes('injury')
+                      ? 'text-red-400 border-red-500/30'
+                      : drillOutcome.type === 'immunity'
+                      ? 'text-blue-300 border-blue-400/30'
+                      : 'text-amber-300'
+                  }`}>
                     {drillOutcome.badge}
                   </span>
                 </div>

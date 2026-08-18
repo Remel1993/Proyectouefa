@@ -497,9 +497,9 @@ export const CareerView = ({
           const hasVuelta = bMatch.sh2 !== null && bMatch.sh2 !== undefined;
           const isVuelta = (entry.competitionLabel || '').includes('Vuelta') || hasVuelta;
 
-          // Totales de goles hId (ida local) y aId (vuelta local)
-          const totHId = (bMatch.sh || 0) + (bMatch.sa2 || 0);
-          const totAId = (bMatch.sa || 0) + (bMatch.sh2 || 0);
+          // Totales de goles bMatch.hId (ida local, vuelta visitante) y bMatch.aId (ida visitante, vuelta local)
+          const totHId = (bMatch.sh || 0) + (bMatch.sh2 || 0);
+          const totAId = (bMatch.sa || 0) + (bMatch.sa2 || 0);
 
           // Alinear el resultado global de cara al escudo mostrado a la izquierda y derecha en este partido
           const globalLeft = isVuelta ? totAId : totHId;
@@ -511,11 +511,18 @@ export const CareerView = ({
             if (totHId > totAId) winnerId = bMatch.hId;
             else if (totAId > totHId) winnerId = bMatch.aId;
             else if (bMatch.penH !== null && bMatch.penH !== undefined) {
-              winnerId = bMatch.penH > bMatch.penA ? bMatch.aId : bMatch.hId;
+              winnerId = (bMatch.penH || 0) > (bMatch.penA || 0) ? bMatch.hId : bMatch.aId;
             }
             if (winnerId !== null) {
               qualified = winnerId === careerClTeam.id;
             }
+          }
+
+          let penaltiesText = null;
+          if (hasVuelta && bMatch.penH !== null && bMatch.penH !== undefined && bMatch.penA !== null && bMatch.penA !== undefined) {
+            const penLeft = isVuelta ? bMatch.penA : bMatch.penH;
+            const penRight = isVuelta ? bMatch.penH : bMatch.penA;
+            penaltiesText = `(${penLeft}-${penRight} pen.)`;
           }
 
           aggregateInfo = {
@@ -524,7 +531,7 @@ export const CareerView = ({
             leg1Score: `${bMatch.sh} - ${bMatch.sa}`,
             leg2Score: hasVuelta ? `${bMatch.sh2} - ${bMatch.sa2}` : null,
             globalScoreText: hasVuelta ? `${globalLeft} - ${globalRight}` : `${bMatch.sh} - ${bMatch.sa}`,
-            penaltiesText: (bMatch.penH !== null && bMatch.penH !== undefined) ? `(${bMatch.penH}-${bMatch.penA} pen.)` : null,
+            penaltiesText,
             qualified
           };
         }
@@ -635,7 +642,7 @@ export const CareerView = ({
           const rivalTeam = isHome ? at : ht;
           const res = myScore > rivalScore ? 'W' : myScore === rivalScore ? 'D' : 'L';
           userClHistoryMatches.push({
-            dayLabel: h.day,
+            dayLabel: typeof h.day === 'number' ? `Jornada ${h.day}` : String(h.day ?? ''),
             isHome,
             myScore,
             rivalScore,
@@ -1283,8 +1290,12 @@ export const CareerView = ({
                   )}
 
                   <div className='flex items-center justify-between text-[8px] font-bold text-slate-400 px-1'>
-                    <span>Balance: +{lastPlayedMatchOverall.pe || 0} PE ganados</span>
-                    <span className='text-amber-400 font-black'>+{lastPlayedMatchOverall.rep || 0} Reputación</span>
+                    <span className='flex items-center gap-1'>
+                      Balance: <strong className={(lastPlayedMatchOverall.pe || 0) > 0 ? 'text-emerald-400 font-black' : 'text-slate-400 font-bold'}>+{(lastPlayedMatchOverall.pe || 0)} PE ganados</strong>
+                    </span>
+                    <span className={(lastPlayedMatchOverall.rep || 0) > 0 ? 'text-emerald-400 font-black' : (lastPlayedMatchOverall.rep || 0) < 0 ? 'text-rose-400 font-black' : 'text-slate-400 font-bold'}>
+                      {(lastPlayedMatchOverall.rep || 0) > 0 ? `+${lastPlayedMatchOverall.rep}` : (lastPlayedMatchOverall.rep || 0)} Reputación
+                    </span>
                   </div>
                 </div>
               )}
@@ -3338,8 +3349,12 @@ export const CareerMatchView = ({ matchState, rolling, onRoll, onFinish, ui }) =
           }`}>
             {isChampions ? '⭐ UEFA Champions League' : 'En Directo'}
           </div>
-          <span className='text-[8px] font-black uppercase italic text-slate-300 tracking-wider'>
-            {isChampions ? (matchState.championsPhase ? clPhaseLabel(matchState.championsPhase) : 'Noche Europea') : 'Jornada de Liga'}
+          <span className='text-[8px] font-black uppercase italic text-slate-300 tracking-wider flex items-center gap-1.5'>
+            {isChampions
+              ? `${matchState.championsPhase ? clPhaseLabel(matchState.championsPhase) : 'Noche Europea'}${
+                  matchState.isVuelta ? ' · Partido de Vuelta' : matchState.championsPhase === 'Final' ? ' · Gran Final' : ' · Partido de Ida'
+                }`
+              : 'Jornada de Liga'}
           </span>
         </div>
         <div className='w-10' />
@@ -3358,7 +3373,17 @@ export const CareerMatchView = ({ matchState, rolling, onRoll, onFinish, ui }) =
             <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{matchState.home.att + '/' + matchState.home.opp + '/' + matchState.home.def}</p>
           </div>
 
-          <div className='px-4 flex flex-col items-center shrink-0 w-32'>
+          <div className='px-4 flex flex-col items-center shrink-0 min-w-[140px]'>
+            {matchState.aggregate && (
+              <div className='mb-2 bg-gradient-to-r from-blue-600/50 via-indigo-600/60 to-blue-600/50 border border-blue-400/50 px-3 py-1 rounded-full flex flex-col items-center shadow-lg'>
+                <span className='text-[9px] font-black uppercase italic text-amber-300 tracking-wider whitespace-nowrap'>
+                  Global: {matchState.aggregate.sh + matchState.scoreH} - {matchState.aggregate.sa + matchState.scoreA}
+                </span>
+                <span className='text-[7px] text-blue-200 font-bold tracking-tight'>
+                  (Ida: {matchState.aggregate.sh} - {matchState.aggregate.sa})
+                </span>
+              </div>
+            )}
             <div className='text-5xl font-black italic tracking-tighter flex gap-3 tabular-nums drop-shadow-[0_0_15px_rgba(0,0,0,0.8)] text-white'>
               <span>{matchState.scoreH}</span>
               <span className='text-slate-400'>-</span>
