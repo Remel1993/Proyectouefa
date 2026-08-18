@@ -30,7 +30,8 @@ export interface ChampionsBracket {
  */
 export const sanitizeChampionsBracket = (
   bracket: any,
-  teams: any[] = []
+  teams: any[] = [],
+  currentPhase?: string
 ): ChampionsBracket | null => {
   if (!bracket || typeof bracket !== 'object') return null;
 
@@ -48,10 +49,13 @@ export const sanitizeChampionsBracket = (
   const phases = ['Octavos', 'Cuartos', 'Semis'];
 
   phases.forEach((p, pIdx) => {
+    // Si esta fase es la que se está jugando actualmente, NO inventar la vuelta
+    if (currentPhase && currentPhase === p) return;
+
     if (!Array.isArray(newBracket[p]) || newBracket[p].length === 0) return;
     const nextPhase = pIdx === 0 ? 'Cuartos' : pIdx === 1 ? 'Semis' : 'Final';
     const nextRound = Array.isArray(newBracket[nextPhase]) ? newBracket[nextPhase] : [newBracket[nextPhase]].filter(Boolean);
-    const hasAdvancedTeams = nextRound.some((nm: any) => nm && (nm.hId || nm.aId));
+    const hasAdvancedTeams = nextRound.some((nm: any) => nm && nm.hId !== null && nm.hId !== undefined && nm.aId !== null && nm.aId !== undefined);
 
     newBracket[p] = newBracket[p].map((m: any, mIdx: number) => {
       if (!m) return m;
