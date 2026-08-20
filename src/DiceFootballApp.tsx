@@ -122,15 +122,23 @@ const getAuthenticTeamStats = (team: any) => {
 // - 16 equipos de ligas (5.º, 6.º, 7.º, 8.º de España, Italia, Inglaterra, Alemania)
 //   Inyectados conforme a la tabla de clasificación de cada liga (o coeficiente de plantilla si es el 1.er torneo),
 //   garantizando que NINGÚN equipo clasificado a Champions League sea repetido.
-// - Dieciseisavos: Cruces 5º vs 8º y 6º vs 7º entre países diferentes (sin cruce de mismo país).
-// - Octavos: Los 8 ganadores de Dieciseisavos se enfrentan a los 8 Repescados de la Champions League (3.º de cada grupo).
+// Helper para construir el cuadro eliminatorio completo de UEFA Europa League (C3).
+// Formato auténtico europeo de 24 clubes:
+// - 16 clubes clasificados de liga (5.º y 6.º de las 8 ligas europeas: ES, EN, IT, DE, FR, NL, MI, MB).
+// - 8 Repescados de la UEFA Champions League (3.er lugar de cada uno de los 8 grupos de Champions).
+// - Dieciseisavos: 8 cruces a Ida y Vuelta entre 5.ºs y 6.ºs de ligas distintas (sin cruce nacional en 1/16).
+// - Octavos: Los 8 ganadores de Dieciseisavos se enfrentan a los 8 Repescados de la Champions League.
 // - Cuartos, Semifinales y Gran Final.
 const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
   const leagueConfigs = [
     { id: 'L1', country: 'España', code: 'ES' },
-    { id: 'L2', country: 'Italia', code: 'IT' },
     { id: 'L3', country: 'Inglaterra', code: 'EN' },
-    { id: 'L4', country: 'Alemania', code: 'DE' }
+    { id: 'L2', country: 'Italia', code: 'IT' },
+    { id: 'L4', country: 'Alemania', code: 'DE' },
+    { id: 'L6', country: 'Francia', code: 'FR' },
+    { id: 'L5', country: 'Países Bajos', code: 'NL' },
+    { id: 'L7', country: 'Miscelánea A', code: 'MI' },
+    { id: 'L8', country: 'Miscelánea B', code: 'MB' }
   ];
 
   // 1. Recolectar nombres de equipos que ya están en Champions League (C1) para evitar duplicados
@@ -154,9 +162,9 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
         ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) ||
         (b.gf || 0) - (a.gf || 0)
       );
-    } else if (Array.isArray(comp?.previousStandings) && comp.previousStandings.length >= 8) {
+    } else if (Array.isArray(comp?.previousStandings) && comp.previousStandings.length >= 6) {
       sourceTeams = [...comp.previousStandings];
-    } else if (Array.isArray(comp?.teams) && comp.teams.length >= 8) {
+    } else if (Array.isArray(comp?.teams) && comp.teams.length >= 6) {
       const hasPlayed = comp.teams.some((t: any) => (t.p || 0) > 0 || (t.pts || 0) > 0) || (comp.matchday || 0) > 0;
       if (hasPlayed) {
         sourceTeams = [...comp.teams].sort((a: any, b: any) => 
@@ -183,12 +191,12 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
 
     // Si aún no se han poblado equipos explícitos de C1 (ej. primer torneo), los 4 primeros de cada liga van a CL,
     // por lo que para Europa League tomamos a partir del 5.º puesto:
-    if (clTeamsSet.size === 0 && availableTeams.length >= 8) {
+    if (clTeamsSet.size === 0 && availableTeams.length >= 6) {
       availableTeams = availableTeams.slice(4);
     }
 
     // Respaldo de seguridad con presets si faltasen clubes
-    if (availableTeams.length < 4) {
+    if (availableTeams.length < 2) {
       const presetPool = (PRESETS[cfg.code] || []).filter(t => !clTeamsSet.has(t.name) && !availableTeams.some(x => x.name === t.name));
       availableTeams = [...availableTeams, ...presetPool];
     }
@@ -196,7 +204,6 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
     const t5 = availableTeams[0] || sourceTeams[4] || sourceTeams[0];
     const t6 = availableTeams[1] || sourceTeams[5] || sourceTeams[1];
     const t7 = availableTeams[2] || sourceTeams[6] || sourceTeams[2];
-    const t8 = availableTeams[3] || sourceTeams[7] || sourceTeams[3];
 
     const wrapTeam = (raw: any, rank: number) => {
       const auth = getAuthenticTeamStats(raw);
@@ -218,29 +225,28 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
     leagueTeamsByRank[cfg.code] = {
       5: wrapTeam(t5, 5),
       6: wrapTeam(t6, 6),
-      7: wrapTeam(t7, 7),
-      8: wrapTeam(t8, 8)
+      7: wrapTeam(t7, 7)
     };
   });
 
-  // Los 16 equipos de liga (IDs 1 al 16)
+  // Los 16 equipos de liga (IDs 1 al 16): 5.º y 6.º de cada una de las 8 ligas europeas
   const leagueTeams: any[] = [
     { ...leagueTeamsByRank['ES'][5], id: 1 },
     { ...leagueTeamsByRank['ES'][6], id: 2 },
-    { ...leagueTeamsByRank['ES'][7], id: 3 },
-    { ...leagueTeamsByRank['ES'][8], id: 4 },
+    { ...leagueTeamsByRank['EN'][5], id: 3 },
+    { ...leagueTeamsByRank['EN'][6], id: 4 },
     { ...leagueTeamsByRank['IT'][5], id: 5 },
     { ...leagueTeamsByRank['IT'][6], id: 6 },
-    { ...leagueTeamsByRank['IT'][7], id: 7 },
-    { ...leagueTeamsByRank['IT'][8], id: 8 },
-    { ...leagueTeamsByRank['EN'][5], id: 9 },
-    { ...leagueTeamsByRank['EN'][6], id: 10 },
-    { ...leagueTeamsByRank['EN'][7], id: 11 },
-    { ...leagueTeamsByRank['EN'][8], id: 12 },
-    { ...leagueTeamsByRank['DE'][5], id: 13 },
-    { ...leagueTeamsByRank['DE'][6], id: 14 },
-    { ...leagueTeamsByRank['DE'][7], id: 15 },
-    { ...leagueTeamsByRank['DE'][8], id: 16 }
+    { ...leagueTeamsByRank['DE'][5], id: 7 },
+    { ...leagueTeamsByRank['DE'][6], id: 8 },
+    { ...leagueTeamsByRank['FR'][5], id: 9 },
+    { ...leagueTeamsByRank['FR'][6], id: 10 },
+    { ...leagueTeamsByRank['NL'][5], id: 11 },
+    { ...leagueTeamsByRank['NL'][6], id: 12 },
+    { ...leagueTeamsByRank['MI'][5], id: 13 },
+    { ...leagueTeamsByRank['MI'][6], id: 14 },
+    { ...leagueTeamsByRank['MB'][5], id: 15 },
+    { ...leagueTeamsByRank['MB'][6], id: 16 }
   ];
 
   // 8 Repescados de Champions League (3.º de cada grupo de Champions)
@@ -250,31 +256,30 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
 
   const extracted = extractChampionsRepescados(c1);
   extracted.forEach(t => {
-    if (!addedRepescaNames.has(t.name)) {
+    if (t && t.name && !addedRepescaNames.has(t.name)) {
       addedRepescaNames.add(t.name);
       repescados.push({ ...t, id: 17 + repescados.length });
     }
   });
 
-  const fallbackRepescados = [
-    { name: 'Porto', color1: '#002B7F', color2: '#FFFFFF', isFlag: false, att: 4, opp: 4, def: 4, league: 'MI', group: 'Grupo A' },
-    { name: 'Benfica', color1: '#E30613', color2: '#FFFFFF', isFlag: false, att: 4, opp: 4, def: 4, league: 'MI', group: 'Grupo B' },
-    { name: 'Ajax', color1: '#D2122E', color2: '#FFFFFF', isFlag: false, att: 4, opp: 4, def: 4, league: 'NL', group: 'Grupo C' },
-    { name: 'Sporting CP', color1: '#006633', color2: '#FFFFFF', isFlag: false, att: 4, opp: 4, def: 4, league: 'MI', group: 'Grupo D' },
-    { name: 'Marseille', color1: '#00A1E4', color2: '#FFFFFF', isFlag: false, att: 4, opp: 4, def: 4, league: 'FR', group: 'Grupo E' },
-    { name: 'PSV', color1: '#E10600', color2: '#FFFFFF', isFlag: false, att: 4, opp: 4, def: 4, league: 'NL', group: 'Grupo F' },
-    { name: 'Feyenoord', color1: '#ED1B24', color2: '#FFFFFF', isFlag: false, att: 3, opp: 4, def: 4, league: 'NL', group: 'Grupo G' },
-    { name: 'Galatasaray', color1: '#A90432', color2: '#FDB912', isFlag: false, att: 4, opp: 3, def: 3, league: 'MI', group: 'Grupo H' }
-  ];
-
-  while (repescados.length < 8) {
-    const fb = fallbackRepescados[repescados.length];
-    repescados.push({
-      ...fb,
-      id: 17 + repescados.length,
-      isRepesca: true,
-      clOrigin: `Champions League (3.º Repesca · ${fb.group})`
-    });
+  // Si Champions League aún no ha finalizado sus grupos, sembramos provisionalmente
+  // con los 7.ºs puestos reales de las 8 ligas europeas (clubes 100% auténticos de la base de datos).
+  const provisionalCodes = ['ES', 'EN', 'IT', 'DE', 'FR', 'NL', 'MI', 'MB'];
+  let provIdx = 0;
+  while (repescados.length < 8 && provIdx < provisionalCodes.length) {
+    const code = provisionalCodes[provIdx];
+    const cand = leagueTeamsByRank[code]?.[7] || (PRESETS[code] || [])[6] || (PRESETS[code] || [])[0];
+    if (cand && cand.name && !addedRepescaNames.has(cand.name)) {
+      addedRepescaNames.add(cand.name);
+      const groupLetter = String.fromCharCode(65 + repescados.length);
+      repescados.push({
+        ...cand,
+        id: 17 + repescados.length,
+        isRepesca: true,
+        clOrigin: `Champions League (3.º Grupo ${groupLetter})`
+      });
+    }
+    provIdx++;
   }
 
   // Si hay equipos forzados (e.g. repescado del usuario tras quedar 3.º en Champions):
@@ -306,16 +311,16 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
     p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0
   }));
 
-  // Dieciseisavos: Cruces 5º vs 8º y 6º vs 7º entre diferentes países (sin cruce nacional)
+  // Dieciseisavos: Cruces 5.º vs 6.º entre ligas europeas diferentes (garantía anti-cruce nacional en 1/16)
   const dieciseisavosMatches = [
-    { id: 'D1', hId: 1,  aId: 12, label: '5.º España vs 8.º Inglaterra', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
-    { id: 'D2', hId: 9,  aId: 4,  label: '5.º Inglaterra vs 8.º España', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
-    { id: 'D3', hId: 5,  aId: 16, label: '5.º Italia vs 8.º Alemania',    sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
-    { id: 'D4', hId: 13, aId: 8,  label: '5.º Alemania vs 8.º Italia',    sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
-    { id: 'D5', hId: 2,  aId: 7,  label: '6.º España vs 7.º Italia',      sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
-    { id: 'D6', hId: 6,  aId: 3,  label: '6.º Italia vs 7.º España',      sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
-    { id: 'D7', hId: 10, aId: 15, label: '6.º Inglaterra vs 7.º Alemania', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
-    { id: 'D8', hId: 14, aId: 11, label: '6.º Alemania vs 7.º Inglaterra', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null }
+    { id: 'D1', hId: 1,  aId: 4,  label: '5.º España vs 6.º Inglaterra', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
+    { id: 'D2', hId: 3,  aId: 2,  label: '5.º Inglaterra vs 6.º España', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
+    { id: 'D3', hId: 5,  aId: 8,  label: '5.º Italia vs 6.º Alemania',    sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
+    { id: 'D4', hId: 7,  aId: 6,  label: '5.º Alemania vs 6.º Italia',    sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
+    { id: 'D5', hId: 9,  aId: 12, label: '5.º Francia vs 6.º Países Bajos', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
+    { id: 'D6', hId: 11, aId: 10, label: '5.º Países Bajos vs 6.º Francia', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
+    { id: 'D7', hId: 13, aId: 16, label: '5.º Miscelánea A vs 6.º Miscelánea B', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null },
+    { id: 'D8', hId: 15, aId: 14, label: '5.º Miscelánea B vs 6.º Miscelánea A', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null }
   ];
 
   // Octavos: Los 8 ganadores de Dieciseisavos se enfrentan a los 8 Repescados de Champions League
@@ -807,33 +812,49 @@ const getShuffleData = (compId: string, compsState: any) => {
   const isUEL = compId === 'C3';
   if (isUEL) {
     const base = buildUELKnockout(compsState);
-    const es5 = 1, es6 = 2, es7 = 3, es8 = 4;
-    const it5 = 5, it6 = 6, it7 = 7, it8 = 8;
-    const en5 = 9, en6 = 10, en7 = 11, en8 = 12;
-    const de5 = 13, de6 = 14, de7 = 15, de8 = 16;
+    // IDs 1,3,5,7,9,11,13,15 son los 5.ºs puestos (Cabezas de serie de Dieciseisavos)
+    // IDs 2,4,6,8,10,12,14,16 son los 6.ºs puestos (No cabezas de serie)
+    const seeded5 = [1, 3, 5, 7, 9, 11, 13, 15]; // ES5, EN5, IT5, DE5, FR5, NL5, MI5, MB5
+    const unseeded6 = [2, 4, 6, 8, 10, 12, 14, 16]; // ES6, EN6, IT6, DE6, FR6, NL6, MI6, MB6
 
-    // Permutación de 5º vs 8º entre países diferentes
-    const picked5v8 = Math.random() < 0.5
-      ? [[es5, de8], [de5, es8], [it5, en8], [en5, it8]]
-      : [[es5, en8], [en5, es8], [it5, de8], [de5, it8]];
+    // Emparejamientos válidos sin coincidencia de país (unseeded[i] !== seeded[i] + 1)
+    let shuffled6 = [...unseeded6].sort(() => Math.random() - 0.5);
+    for (let attempts = 0; attempts < 100; attempts++) {
+      const hasClash = seeded5.some((sId, idx) => shuffled6[idx] === sId + 1);
+      if (!hasClash) break;
+      shuffled6 = [...unseeded6].sort(() => Math.random() - 0.5);
+    }
 
-    // Permutación de 6º vs 7º entre países diferentes
-    const picked6v7 = Math.random() < 0.5
-      ? [[es6, de7], [de6, es7], [it6, en7], [en6, it7]]
-      : [[es6, it7], [it6, es7], [en6, de7], [de6, en7]];
+    const shuffledD = seeded5.map((hId, idx) => {
+      const aId = shuffled6[idx];
+      const hTeam = base.teams.find((t: any) => t.id === hId);
+      const aTeam = base.teams.find((t: any) => t.id === aId);
+      return {
+        id: 'D' + (idx + 1),
+        hId,
+        aId,
+        label: `${hTeam?.name || 'Local'} vs ${aTeam?.name || 'Visitante'}`,
+        sh: null,
+        sa: null,
+        sh2: null,
+        sa2: null,
+        penH: null,
+        penA: null
+      };
+    });
 
-    const shuffledD = [
-      ...picked5v8.map(([h, a], idx) => ({ id: 'D' + (idx + 1), hId: h, aId: a, sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null })),
-      ...picked6v7.map(([h, a], idx) => ({ id: 'D' + (idx + 5), hId: h, aId: a, sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null }))
-    ];
-
-    // Mezclar orden de los repescados en Octavos
+    // Mezclar orden de los 8 repescados en Octavos de Final
     const repIds = [17, 18, 19, 20, 21, 22, 23, 24].sort(() => Math.random() - 0.5);
     const shuffledO = Array(8).fill(null).map((_, i) => ({
       id: 'O' + (i + 1),
       hId: null,
       aId: repIds[i],
-      sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null
+      sh: null,
+      sa: null,
+      sh2: null,
+      sa2: null,
+      penH: null,
+      penA: null
     }));
 
     return {
@@ -5193,6 +5214,10 @@ function DiceFootballApp() {
       finishCareerChampionsMatch(matchState.scoreH, matchState.scoreA, matchState.penalties);
       return;
     }
+    if (matchState.careerUelMatch) {
+      finishCareerUelMatch(matchState.scoreH, matchState.scoreA, matchState.penalties);
+      return;
+    }
     if (!careerFixture) return;
     applyCareerMatchday(matchState.scoreH, matchState.scoreA);
   };
@@ -5585,9 +5610,108 @@ function DiceFootballApp() {
     };
   }, [clComp, careerClTeam, careerClAlive, careerClWinnerId, seasonState.phase, seasonState.season]);
 
+  // Inicializa o sortea la Champions League sin alterar ni terminar las ligas en juego
+  const initOrDrawChampions = (forceDraw = false) => {
+    const seasonNow = seasonState.season || 1;
+    setComps(prev => {
+      const next = { ...prev };
+      let c1 = next['C1'];
+
+      // Si ya está sorteada y no se solicita un nuevo sorteo forzado, no reiniciar
+      if (c1?.teams?.length && !forceDraw) {
+        return prev;
+      }
+
+      // Identificar si el equipo del modo carrera tiene plaza continental
+      const careerQualifiedName = (() => {
+        if (!career.active || !career.teamId || career.div !== 1) return null;
+        if (career.clQualified) return careerTeam?.name || null;
+        const comp = next[career.compId];
+        const table = [...(comp?.teams || [])].sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
+        const pos = table.findIndex(t => t.id === career.teamId) + 1;
+        const maxSpots = career.compId === 'L7' ? 8 : 4;
+        return (pos > 0 && pos <= maxSpots) || (career.tier >= 4) ? (careerTeam?.name || null) : null;
+      })();
+
+      const cl = getAutoFillData('C1', next, careerQualifiedName ? [careerQualifiedName] : []);
+      if (cl) {
+        const mine = careerQualifiedName ? (cl.teams || []).find(t => t.name === careerQualifiedName) : null;
+        next['C1'] = {
+          ...next['C1'],
+          ...cl,
+          id: 'C1',
+          name: next['C1']?.name || 'Champions League',
+          type: 'cup',
+          phase: 'groups',
+          matchday: 0,
+          showWinner: false,
+          careerTeamName: careerQualifiedName || null,
+          careerTeamId: mine?.id || null,
+          userTeamId: mine?.id || cl.userTeamId
+        };
+      }
+      return next;
+    });
+
+    if (career.active && career.tier >= 3) {
+      setCareer(c => ({ ...c, clSeason: seasonNow, clQualified: true }));
+    }
+  };
+
+  // Sorteo de Cuadro de Eliminatorias (Octavos de Final)
+  const performChampionsKnockoutDraw = () => {
+    setComps(prev => {
+      const next = { ...prev };
+      let c1 = next['C1'];
+      if (!c1 || !c1.groups || !c1.teams) return prev;
+      const newBracket = generateKnockoutBrackets(c1);
+      if (newBracket) {
+        c1 = {
+          ...c1,
+          bracket: newBracket,
+          phase: 'Octavos'
+        };
+        next['C1'] = c1;
+
+        // Inyectar inmediatamente los 8 repescados reales a la UEFA Europa League (C3)
+        let c3 = next['C3'];
+        if (!c3 || !c3.teams || c3.teams.length === 0) {
+          const autoData = getAutoFillData('C3', next);
+          if (autoData) {
+            c3 = { ...next['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+          }
+        }
+        if (c3) {
+          next['C3'] = syncChampionsRepescadosToUEL(c1, c3);
+        }
+      }
+      return next;
+    });
+
+    if (career.active && comps['C1']?.careerTeamId) {
+      const c1 = comps['C1'];
+      const userTeamId = c1.careerTeamId;
+      const userGroup = c1.groups?.find((g: any) => g.teamIds?.includes(userTeamId));
+      if (userGroup) {
+        const groupTeams = (c1.teams || []).filter((t: any) => userGroup.teamIds?.includes(t.id)).sort((a: any, b: any) =>
+          (b.pts || 0) - (a.pts || 0) ||
+          ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) ||
+          (b.gf || 0) - (a.gf || 0)
+        );
+        const userPos = groupTeams.findIndex((t: any) => t.id === userTeamId);
+        if (userPos === 2) {
+          setCareer(c => ({ ...c, clQualified: false, uelQualified: true }));
+        } else if (userPos >= 3) {
+          setCareer(c => ({ ...c, clQualified: false, uelQualified: false }));
+        } else {
+          setCareer(c => ({ ...c, clQualified: true, uelQualified: false }));
+        }
+      }
+    }
+  };
+
   // Simula hasta el final (100% de jornadas) todas las ligas europeas pendientes,
-  // registra sus campeones, inicializa la Champions League con los clasificados reales
-  // y abre la Champions League inmediatamente sin bloqueos.
+  // únicamente cuando la temporada regular concluye o se solicita explícitamente el cierre de ligas
   const finishAllLeaguesAndOpenChampions = () => {
     const seasonNow = seasonState.season || 1;
     setComps(prev => {
@@ -5681,7 +5805,7 @@ function DiceFootballApp() {
   // Manda al técnico a la Champions en el Modo Carrera / Entrenador
   const openCareerChampions = () => {
     if (!comps['C1']?.teams?.length) {
-      finishAllLeaguesAndOpenChampions();
+      initOrDrawChampions(false);
     }
     setView('career');
   };
@@ -5690,7 +5814,7 @@ function DiceFootballApp() {
   const startCareerChampionsMatch = () => {
     let clComp = comps['C1'];
     if (!clComp?.teams?.length) {
-      finishAllLeaguesAndOpenChampions();
+      initOrDrawChampions(false);
       clComp = comps['C1'];
     }
 
@@ -6049,7 +6173,7 @@ function DiceFootballApp() {
   const simulateCareerChampionsMatch = () => {
     let clComp = comps['C1'];
     if (!clComp?.teams?.length) {
-      finishAllLeaguesAndOpenChampions();
+      initOrDrawChampions(false);
       clComp = comps['C1'];
     }
 
@@ -6154,6 +6278,397 @@ function DiceFootballApp() {
     }
 
     executeCareerChampionsSimulatedMatch(injuryAttr, trainingFeedback, extraTrainingPe, newImmunityWeeks, injuryOccurredInSim);
+  };
+
+  // Inicia un partido de UEFA Europa League para el equipo del modo carrera con dados en directo
+  const startCareerUelMatch = () => {
+    let uelComp = comps['C3'];
+    if (!uelComp?.teams?.length) {
+      const autoData = getAutoFillData('C3', comps);
+      if (autoData) {
+        uelComp = { ...comps['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+        setComps(prev => ({ ...prev, C3: uelComp }));
+      }
+    }
+
+    if (!uelComp?.teams?.length || !careerTeam) return;
+
+    const careerUelTeam = uelComp.teams.find(t => t.id === uelComp.careerTeamId) ||
+      uelComp.teams.find(t => t.name === (uelComp.careerTeamName || careerTeam.name)) ||
+      uelComp.teams.find(t => t.id === uelComp.userTeamId);
+    if (!careerUelTeam) return;
+
+    const phase = uelComp.phase || 'Dieciseisavos';
+    const matchday = uelComp.matchday || 0;
+
+    const baseTeamStats = {
+      att: Math.max(career.baseDist?.att || 1, careerTeam.att || 1),
+      opp: Math.max(career.baseDist?.opp || 1, careerTeam.opp || 1),
+      def: Math.max(career.baseDist?.def || 1, careerTeam.def || 1)
+    };
+    const tactic = career.tactic ? { ...career.tactic } : { ...baseTeamStats };
+    let myFinalStats = { ...tactic };
+    if (career.activeInjury) {
+      const attr = career.activeInjury.attr as 'att' | 'opp' | 'def';
+      if (attr) myFinalStats[attr] = Math.max(1, (myFinalStats[attr] || 1) - 1);
+    }
+
+    const bracketMatches = Array.isArray(uelComp.bracket?.[phase])
+      ? uelComp.bracket[phase]
+      : [uelComp.bracket?.[phase]].filter(Boolean);
+
+    const match = bracketMatches.find((m: any) => m && (m.hId === careerUelTeam.id || m.aId === careerUelTeam.id));
+    if (!match) return;
+
+    const isVuelta = matchday % 2 !== 0 && phase !== 'Final';
+    const homeId = isVuelta ? match.aId : match.hId;
+    const awayId = isVuelta ? match.hId : match.aId;
+    const rawHome = uelComp.teams.find((t: any) => t.id === homeId);
+    const rawAway = uelComp.teams.find((t: any) => t.id === awayId);
+    const isHome = homeId === careerUelTeam.id;
+
+    const myTeamResolved = {
+      ...(isHome ? rawHome : rawAway),
+      ...myFinalStats,
+      color1: careerTeam.color1,
+      color2: careerTeam.color2,
+      isFlag: careerTeam.isFlag
+    };
+
+    const home = isHome ? myTeamResolved : rawHome;
+    const away = isHome ? rawAway : myTeamResolved;
+
+    let aggregate = null;
+    if (isVuelta && match.sh !== null && match.sa !== null) {
+      aggregate = { sh: match.sa, sa: match.sh };
+    }
+
+    setMatchState(null);
+    setMatchState({
+      home,
+      away,
+      scoreH: 0,
+      scoreA: 0,
+      oppH: home.opp,
+      oppA: away.opp,
+      turn: 'H',
+      phase: 'att',
+      lastDie: null,
+      logs: [`🟠 UEFA Europa League · ${phase}${isVuelta ? ' (Vuelta)' : phase === 'Final' ? ' (Gran Final)' : ' (Ida)'}: ${home.name} vs ${away.name}.`],
+      penalties: null,
+      finished: false,
+      careerMatch: true,
+      careerUelMatch: true,
+      isKnockout: true,
+      isVuelta,
+      aggregate,
+      isEuropaLeague: true,
+      uelPhase: phase
+    });
+    setView('careerMatch');
+  };
+
+  // Finaliza un partido de UEFA Europa League del modo carrera
+  const finishCareerUelMatch = (
+    scoreH: number,
+    scoreA: number,
+    penalties: any = null,
+    simulatedTeams: { home: any; away: any } | null = null,
+    trainingFeedback: any = null,
+    extraTrainingPe: number = 0,
+    nextImmunityWeeks: number | null = null,
+    injuryOccurredInSim: boolean = false
+  ) => {
+    const uelComp = comps['C3'];
+    if (!uelComp || !careerTeam) {
+      setMatchState(null);
+      setView('career');
+      return;
+    }
+
+    const careerUelTeam = uelComp.teams.find(t => t.id === uelComp.careerTeamId) ||
+      uelComp.teams.find(t => t.name === (uelComp.careerTeamName || careerTeam.name)) ||
+      uelComp.teams.find(t => t.id === uelComp.userTeamId);
+
+    const activeHome = simulatedTeams?.home || matchState?.home;
+    const activeAway = simulatedTeams?.away || matchState?.away;
+    const isHome = activeHome?.id === careerUelTeam?.id;
+    const myGf = isHome ? scoreH : scoreA;
+    const myGa = isHome ? scoreA : scoreH;
+    const result: 'W' | 'D' | 'L' = myGf > myGa ? 'W' : myGf === myGa ? 'D' : 'L';
+    const rivalName = isHome ? activeAway?.name : activeHome?.name;
+    const currentPhase = uelComp.phase || 'Dieciseisavos';
+
+    // 1. Procesar la ronda en el torneo global C3
+    processCupRound(
+      {
+        home: activeHome,
+        away: activeAway,
+        scoreH,
+        scoreA,
+        penalties
+      },
+      'C3'
+    );
+
+    // 2. Recompensas por partido en UEFA Europa League
+    const matchPeGained = result === 'W' ? (currentPhase === 'Final' ? 5 : 3) : result === 'D' ? 2 : 0;
+    const totalPeGained = Math.max(0, matchPeGained + extraTrainingPe);
+    const repGained = result === 'W' ? (currentPhase === 'Final' ? 2.0 : 0.6) : result === 'D' ? 0.2 : -0.1;
+    const isUelWinner = currentPhase === 'Final' && (result === 'W' || (penalties && (isHome ? penalties.scoreH > penalties.scoreA : penalties.scoreA > penalties.scoreH)));
+
+    setCareer(c => {
+      const cleanBase = {
+        att: Math.max(c.baseDist?.att || 1, careerTeam.att || 1),
+        opp: Math.max(c.baseDist?.opp || 1, careerTeam.opp || 1),
+        def: Math.max(c.baseDist?.def || 1, careerTeam.def || 1)
+      };
+      const newRep = Math.max(0, Math.min(100, Math.round(((c.reputation || 10) + repGained) * 10) / 10));
+      const newStats = {
+        ...c.stats,
+        played: (c.stats?.played || 0) + 1,
+        wins: (c.stats?.wins || 0) + (result === 'W' ? 1 : 0),
+        draws: (c.stats?.draws || 0) + (result === 'D' ? 1 : 0),
+        losses: (c.stats?.losses || 0) + (result === 'L' ? 1 : 0),
+        gf: (c.stats?.gf || 0) + myGf,
+        ga: (c.stats?.ga || 0) + myGa
+      };
+
+      const resolvedImmunity = nextImmunityWeeks !== null && nextImmunityWeeks !== undefined
+        ? nextImmunityWeeks
+        : injuryOccurredInSim
+        ? 3
+        : Math.max(0, (c.medicalImmunityWeeks || 0) - 1);
+
+      return {
+        ...c,
+        pe: Math.max(0, (c.pe || 0) + totalPeGained),
+        reputation: newRep,
+        activeInjury: null,
+        medicalImmunityWeeks: resolvedImmunity,
+        trainedMatchKey: currentMatchKey,
+        uelChampion: isUelWinner ? true : c.uelChampion,
+        baseDist: cleanBase,
+        tactic: cleanBase,
+        stats: newStats,
+        lastSimulationFeedback: {
+          matchday: (uelComp.matchday || 0) + 1,
+          isEuropaLeague: true,
+          rivalName: rivalName || 'Rival Europeo',
+          myGf,
+          myGa,
+          result,
+          peGained: totalPeGained,
+          matchPeGained,
+          trainingPeGained: extraTrainingPe,
+          trainingFeedback,
+          repGained,
+          headline: `🟠 UEFA Europa League · ${currentPhase}`,
+          summary: isUelWinner
+            ? `🏆 ¡CAMPEÓN DE LA UEFA EUROPA LEAGUE! Vences a ${rivalName} en la Gran Final. Ganancia total: +${totalPeGained} PE y +${repGained} reputación.`
+            : result === 'W'
+            ? `¡Victoria en Europa League! ${myGf}-${myGa} contra ${rivalName}. Sumas +${totalPeGained} PE y +${repGained} reputación.`
+            : result === 'D'
+            ? `Empate ${myGf}-${myGa} contra ${rivalName}. Sumas +${totalPeGained} PE y +${repGained} reputación.`
+            : `Derrota ${myGf}-${myGa} contra ${rivalName} en la UEFA Europa League (${repGained} reputación).`
+        },
+        seasonLog: [
+          {
+            matchday: (uelComp.matchday || 0) + 1,
+            isEuropaLeague: true,
+            phase: currentPhase,
+            rival: rivalName,
+            gf: myGf,
+            ga: myGa,
+            result,
+            rep: repGained,
+            pe: totalPeGained
+          },
+          ...(c.seasonLog || [])
+        ].slice(0, 60)
+      };
+    });
+
+    setSeasonState(s => ({
+      ...s,
+      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
+    }));
+
+    setMatchState(null);
+    if (view === 'careerMatch') {
+      setView('career');
+    }
+  };
+
+  const executeCareerUelSimulatedMatch = (
+    injuryAttr: 'att' | 'opp' | 'def' | null,
+    trainingFeedback: any,
+    extraTrainingPe: number,
+    nextImmunityWeeks: number | null,
+    injuryOccurredInSim: boolean
+  ) => {
+    let uelComp = comps['C3'];
+    if (!uelComp?.teams?.length) {
+      const autoData = getAutoFillData('C3', comps);
+      if (autoData) {
+        uelComp = { ...comps['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+      }
+    }
+    if (!uelComp?.teams?.length || !careerTeam) return;
+
+    const careerUelTeam = uelComp.teams.find(t => t.id === uelComp.careerTeamId) ||
+      uelComp.teams.find(t => t.name === (uelComp.careerTeamName || careerTeam.name)) ||
+      uelComp.teams.find(t => t.id === uelComp.userTeamId);
+    if (!careerUelTeam) return;
+
+    const phase = uelComp.phase || 'Dieciseisavos';
+    const matchday = uelComp.matchday || 0;
+
+    const baseTeamStats = {
+      att: Math.max(career.baseDist?.att || 1, careerTeam.att || 1),
+      opp: Math.max(career.baseDist?.opp || 1, careerTeam.opp || 1),
+      def: Math.max(career.baseDist?.def || 1, careerTeam.def || 1)
+    };
+    const tactic = career.tactic ? { ...career.tactic } : { ...baseTeamStats };
+    let myFinalStats = { ...tactic };
+    if (injuryAttr) {
+      myFinalStats[injuryAttr] = Math.max(1, (myFinalStats[injuryAttr] || baseTeamStats[injuryAttr] || 1) - 1);
+    }
+
+    const bracketMatches = Array.isArray(uelComp.bracket?.[phase])
+      ? uelComp.bracket[phase]
+      : [uelComp.bracket?.[phase]].filter(Boolean);
+
+    const match = bracketMatches.find((m: any) => m && (m.hId === careerUelTeam.id || m.aId === careerUelTeam.id));
+    if (!match) return;
+
+    const isVuelta = matchday % 2 !== 0 && phase !== 'Final';
+    const homeId = isVuelta ? match.aId : match.hId;
+    const awayId = isVuelta ? match.hId : match.aId;
+    const rawHome = uelComp.teams.find((t: any) => t.id === homeId);
+    const rawAway = uelComp.teams.find((t: any) => t.id === awayId);
+    const isHome = homeId === careerUelTeam.id;
+
+    const myTeamResolved = {
+      ...(isHome ? rawHome : rawAway),
+      ...myFinalStats,
+      color1: careerTeam.color1,
+      color2: careerTeam.color2,
+      isFlag: careerTeam.isFlag
+    };
+
+    const home = isHome ? myTeamResolved : rawHome;
+    const away = isHome ? rawAway : myTeamResolved;
+    if (!home || !away) return;
+
+    const { sh: simH, sa: simA } = simMatchGoals(home.opp, home.att, away.def, away.opp, away.att, home.def);
+
+    let penalties: any = null;
+    const leg1H = match?.sh || 0;
+    const leg1A = match?.sa || 0;
+    const isDraw = phase === 'Final' ? (simH === simA) : isVuelta ? ((leg1H + simA) === (leg1A + simH)) : false;
+    if (isDraw) {
+      penalties = simPenaltyShootout(home.att, away.def, away.att, home.def);
+    }
+
+    finishCareerUelMatch(simH, simA, penalties, { home, away }, trainingFeedback, extraTrainingPe, nextImmunityWeeks, injuryOccurredInSim);
+  };
+
+  const simulateCareerUelMatch = () => {
+    let uelComp = comps['C3'];
+    if (!uelComp?.teams?.length) {
+      const autoData = getAutoFillData('C3', comps);
+      if (autoData) {
+        uelComp = { ...comps['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+        setComps(prev => ({ ...prev, C3: uelComp }));
+      }
+    }
+    if (!uelComp?.teams?.length || !careerTeam) return;
+
+    let trainingFeedback: any = null;
+    let newImmunityWeeks = career.medicalImmunityWeeks || 0;
+    let extraTrainingPe = 0;
+    let injuryOccurredInSim = false;
+    let injuryAttr: 'att' | 'opp' | 'def' | null = null;
+
+    if (career.trainedMatchKey !== currentMatchKey) {
+      const die = roll1D6();
+      if (die === 1) {
+        extraTrainingPe = 2;
+        trainingFeedback = {
+          simulated: true,
+          die: 1,
+          peGained: 2,
+          injuryOccurred: false,
+          immunityPrevented: false,
+          message: '¡Gran sesión táctica de Europa League! +2 PE ganados.'
+        };
+      } else if (die === 2) {
+        extraTrainingPe = 1;
+        trainingFeedback = {
+          simulated: true,
+          die: 2,
+          peGained: 1,
+          injuryOccurred: false,
+          immunityPrevented: false,
+          message: '¡Buen entrenamiento para Europa League! +1 PE ganado.'
+        };
+      } else if (die >= 3 && die <= 5) {
+        trainingFeedback = {
+          simulated: true,
+          die,
+          peGained: 0,
+          injuryOccurred: false,
+          immunityPrevented: false,
+          message: 'Preparación para Europa League sin incidencias.'
+        };
+      } else if (die === 6) {
+        const base = {
+          att: Math.max(career.baseDist?.att || 1, careerTeam.att || 1),
+          opp: Math.max(career.baseDist?.opp || 1, careerTeam.opp || 1),
+          def: Math.max(career.baseDist?.def || 1, careerTeam.def || 1)
+        };
+        const tactic = career.tactic ? { ...career.tactic } : { ...base };
+        const attrs: Array<'att' | 'opp' | 'def'> = ['att', 'opp', 'def'].filter(a => (tactic[a] || 1) > 1) as any;
+        const affected: 'att' | 'opp' | 'def' = attrs.length > 0 ? attrs[Math.floor(Math.random() * attrs.length)] : 'att';
+        const attrLabels = { att: 'Ataque (ATT)', opp: 'Ocasiones (OPP)', def: 'Defensa (DEF)' };
+
+        if (newImmunityWeeks > 0) {
+          trainingFeedback = {
+            simulated: true,
+            die: 6,
+            peGained: 0,
+            injuryOccurred: true,
+            immunityPrevented: true,
+            message: `🛡️ ¡Inmunidad Médica activa (${newImmunityWeeks} sem.) evitó la sobrecarga en ${attrLabels[affected]}!`
+          };
+        } else {
+          trainingFeedback = {
+            simulated: true,
+            die: 6,
+            peGained: 0,
+            peCost: 0,
+            physioPaid: false,
+            injuryOccurred: true,
+            immunityPrevented: false,
+            statLost: attrLabels[affected],
+            newImmunityWeeks: 3,
+            message: `Baja médica: -1 ${attrLabels[affected]} en este partido de Europa League (+3 sem. Inmunidad Médica tras el choque).`
+          };
+          injuryAttr = affected;
+          injuryOccurredInSim = true;
+          newImmunityWeeks = 3;
+        }
+      }
+    } else if (career.lastTrainingResult) {
+      trainingFeedback = career.lastTrainingResult;
+      if (career.activeInjury && career.activeInjury.matchKey === currentMatchKey) {
+        injuryAttr = career.activeInjury.attr;
+        injuryOccurredInSim = true;
+      }
+    }
+
+    executeCareerUelSimulatedMatch(injuryAttr, trainingFeedback, extraTrainingPe, newImmunityWeeks, injuryOccurredInSim);
   };
 
   // Simulación de una sola etapa / jornada de una copa (Champions, Europa League o Mundial)
@@ -6375,74 +6890,30 @@ function DiceFootballApp() {
       let next = { ...prev };
       let c1 = next['C1'];
 
-      // Si las ligas aún no han finalizado o C1 no tiene equipos inicializados
+      // Si C1 no tiene equipos inicializados, inicializar Champions de manera segura sin alterar ligas
       if (!c1?.teams?.length) {
-        LEAGUE_IDS.forEach(compId => {
-          const comp = prev[compId];
-          if (!comp || comp.type !== 'league') return;
-          let upd = { ...comp };
-          const runDivToFinish = (teamsKey: string, mdKey: string, histKey: string, winKey: string, isDiv2?: boolean) => {
-            let guard = 0;
-            const total = divTotalRounds(upd[teamsKey]);
-            while ((upd[mdKey] || 0) < total && guard++ < 80) {
-              const res = simulateDivisionMatchday(upd[teamsKey], upd[mdKey] || 0, upd[histKey] || [], compId, isDiv2);
-              if (!res) break;
-              upd = {
-                ...upd,
-                [teamsKey]: res.updatedTeams,
-                [mdKey]: res.nextMatchday,
-                [histKey]: res.newHistory,
-                [winKey]: res.isFinished ? true : upd[winKey]
-              };
-            }
-          };
-          runDivToFinish('teams', 'matchday', 'history', 'showWinner', false);
-          runDivToFinish('teams2', 'matchday2', 'history2', 'showWinner2', true);
-
-          if (leagueSeasonOver(upd)) {
-            upd.previousStandings = buildStandingsSnapshot(upd.teams) || upd.previousStandings || null;
-            upd.previousStandings2 = buildStandingsSnapshot(upd.teams2) || upd.previousStandings2 || null;
-          }
-          next[compId] = upd;
-        });
-
-        const seasonTitles = [];
-        LEAGUE_IDS.forEach(id => {
-          const c = next[id];
-          if (!c) return;
-          const r1 = buildSeasonRecord(c.teams, seasonNow);
-          const r2 = buildSeasonRecord(c.teams2, seasonNow);
-          if (r1) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
-          if (r2) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
-        });
-        registerTitles(seasonTitles);
-
-        LEAGUE_IDS.forEach(id => {
-          const c = next[id];
-          if (!c) return;
-          const withHistory = registerSeasonSummary(c, seasonNow);
-          next[id] = {
-            ...withHistory,
-            previousStandings: buildStandingsSnapshot(c.teams) || c.previousStandings || null,
-            previousStandings2: buildStandingsSnapshot(c.teams2) || c.previousStandings2 || null
-          };
-        });
-
         const careerQualifiedName = (() => {
           if (!career.active || !career.teamId || career.div !== 1) return null;
+          if (career.clQualified) return careerTeam?.name || null;
           const comp = next[career.compId];
           const table = [...(comp?.teams || [])].sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
           const pos = table.findIndex(t => t.id === career.teamId) + 1;
           const maxSpots = career.compId === 'L7' ? 8 : 4;
-          return pos > 0 && pos <= maxSpots ? table[pos - 1].name : null;
+          return (pos > 0 && pos <= maxSpots) || (career.tier >= 4) ? (careerTeam?.name || null) : null;
         })();
 
         const cl = getAutoFillData('C1', next, careerQualifiedName ? [careerQualifiedName] : []);
         if (cl) {
           const mine = careerQualifiedName ? (cl.teams || []).find(t => t.name === careerQualifiedName) : null;
           c1 = {
-            ...next['C1'], ...cl,
+            ...next['C1'],
+            ...cl,
+            id: 'C1',
             name: next['C1']?.name || 'Champions League',
+            type: 'cup',
+            phase: 'groups',
+            matchday: 0,
+            showWinner: false,
             careerTeamName: careerQualifiedName || null,
             careerTeamId: mine?.id || null,
             userTeamId: mine?.id || cl.userTeamId
@@ -6462,6 +6933,22 @@ function DiceFootballApp() {
         }
         archiveCompetition('C1', 1, clWinner, finishedC1);
       }
+
+      // Sincronizar los 8 repescados reales a la UEFA Europa League (C3)
+      let c3 = next['C3'];
+      if (finishedC1 && Array.isArray(finishedC1.groups)) {
+        if (!c3 || !c3.teams || c3.teams.length === 0) {
+          const autoData = getAutoFillData('C3', next);
+          if (autoData) {
+            c3 = { ...next['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+          }
+        }
+        if (c3) {
+          c3 = syncChampionsRepescadosToUEL(finishedC1, c3);
+          next['C3'] = c3;
+        }
+      }
+
       return {
         ...next,
         C1: finishedC1
@@ -6995,7 +7482,13 @@ function DiceFootballApp() {
         // Al culminar la fase de grupos de Champions League, inyectar los 8 terceros puestos en Europa League
         if (isEndOfGroups && cId === 'C1') {
           setComps(prev => {
-            const uel = prev['C3'];
+            let uel = prev['C3'];
+            if (!uel || !uel.teams || uel.teams.length === 0) {
+              const autoData = getAutoFillData('C3', prev);
+              if (autoData) {
+                uel = { ...prev['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+              }
+            }
             if (uel) {
               return {
                 ...prev,
@@ -7004,6 +7497,48 @@ function DiceFootballApp() {
             }
             return prev;
           });
+
+          // Actualizar transición de modo carrera si el club del usuario disputaba Champions
+          if (career.active && updatedComp.careerTeamId) {
+            const userTeamId = updatedComp.careerTeamId;
+            const userGroup = updatedComp.groups?.find((g: any) => g.teamIds?.includes(userTeamId));
+            if (userGroup) {
+              const groupTeams = updatedTeams.filter((t: any) => userGroup.teamIds?.includes(t.id)).sort((a: any, b: any) =>
+                (b.pts || 0) - (a.pts || 0) ||
+                ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) ||
+                (b.gf || 0) - (a.gf || 0)
+              );
+              const userPos = groupTeams.findIndex((t: any) => t.id === userTeamId);
+              if (userPos === 2) {
+                // 3.º Puesto -> Accede a Octavos de UEFA Europa League
+                setCareer(c => ({
+                  ...c,
+                  clQualified: false,
+                  uelQualified: true,
+                  seasonLog: [
+                    {
+                      matchday: (updatedComp.matchday || 6),
+                      isChampions: true,
+                      phase: 'Fase de Grupos',
+                      rival: 'UEFA',
+                      gf: 0,
+                      ga: 0,
+                      result: 'D',
+                      rep: 1.0,
+                      pe: 2
+                    },
+                    ...(c.seasonLog || [])
+                  ]
+                }));
+              } else if (userPos >= 3) {
+                // 4.º Puesto -> Eliminado de competiciones continentales
+                setCareer(c => ({ ...c, clQualified: false, uelQualified: false }));
+              } else {
+                // 1.º o 2.º Puesto -> Clasificado a Octavos de Champions
+                setCareer(c => ({ ...c, clQualified: true, uelQualified: false }));
+              }
+            }
+          }
         }
 
         // Check if user's team was eliminated or reached repesca in group stage (solo en vista standalone de competición)
@@ -9525,24 +10060,8 @@ function DiceFootballApp() {
                 clComp={comps['C1']}
                 uelComp={comps['C3']}
                 onOpenUel={() => { setActiveCompId('C3'); setCompView('main'); setView('competition'); }}
-                onSimulateUelMatch={() => {
-                  setComps(prev => {
-                    let next = { ...prev };
-                    let c3 = next['C3'];
-                    if (!c3 || !c3.teams || c3.teams.length === 0) {
-                      const autoData = getAutoFillData('C3', next);
-                      if (autoData) c3 = { ...next['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
-                    }
-                    if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
-                      next['C3'] = simulateSingleCupStage(c3, 'C3');
-                    }
-                    return next;
-                  });
-                  setSeasonState(s => ({
-                    ...s,
-                    currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
-                  }));
-                }}
+                onPlayUelMatch={startCareerUelMatch}
+                onSimulateUelMatch={simulateCareerUelMatch}
                 onSimulateAllUel={() => {
                   setComps(prev => {
                     let next = { ...prev };
@@ -9564,6 +10083,8 @@ function DiceFootballApp() {
                 onPlayChampionsMatch={startCareerChampionsMatch}
                 onSimulateChampionsMatch={simulateCareerChampionsMatch}
                 onSimulateAllChampions={simulateAllCareerChampions}
+                onDrawChampions={initOrDrawChampions}
+                onPerformKnockoutDraw={performChampionsKnockoutDraw}
                 schedule={careerSchedule}
                 onOpenChampions={openCareerChampions}
                 onAcceptOffer={acceptCareerOffer}
