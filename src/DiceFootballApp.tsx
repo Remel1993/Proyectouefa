@@ -4117,15 +4117,15 @@ function DiceFootballApp() {
   useEffect(() => {
     if (seasonState.phase !== 'leagues') return;
     if (LEAGUE_IDS.some(id => leaguePendingAt(comps[id], globalMatchday))) return;
-    if (LEAGUE_IDS.every(id => leagueSeasonOver(comps[id]))) { finishGlobalSeason(); return; }
+    if (LEAGUE_IDS.every(id => leagueSeasonOver(comps[id]))) {
+      setSeasonState(s => ({ ...s, phase: 'closing' }));
+      return;
+    }
     setSeasonState(s => {
       const nextGlobalMd = (s.globalMatchday || 1) + 1;
-      const calculatedWeek = getWeekForLeagueMatchday(nextGlobalMd);
-      const nextWeek = Math.max(calculatedWeek, (s.currentWeek || 1) + 1);
       return {
         ...s,
-        globalMatchday: nextGlobalMd,
-        currentWeek: Math.min(42, nextWeek)
+        globalMatchday: nextGlobalMd
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5000,6 +5000,46 @@ function DiceFootballApp() {
     syncLeaguesToGlobal(LEAGUE_IDS.filter(id => id !== compId));
     syncLeaguesToGlobal([compId]);
 
+    // Simular copas europeas de esta semana si correspondían
+    const currentWk = seasonState.currentWeek || 1;
+    const weekData = getSemanaCalendario(currentWk);
+    const hasChampions = weekData?.fixtures?.some(f => f.competicion === 'CHAMPIONS' && f.esPartido);
+    const hasEuropa = weekData?.fixtures?.some(f => f.competicion === 'EUROPA_LEAGUE' && f.esPartido);
+
+    if (hasChampions || hasEuropa) {
+      setComps(prev => {
+        let next = { ...prev };
+        let c1 = next['C1'];
+        if (c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado') {
+          const expClMd = getExpectedCupMatchdayForWeek('C1', currentWk);
+          if (hasChampions && (expClMd === null || (c1.matchday || 0) < expClMd)) {
+            c1 = simulateSingleCupStage(c1, 'C1');
+            next['C1'] = c1;
+          }
+        }
+        let c3 = next['C3'];
+        if (c1 && Array.isArray(c1.groups) && (c1.matchday >= 6 || c1.phase !== 'groups')) {
+          if (c3) {
+            c3 = syncChampionsRepescadosToUEL(c1, c3);
+            next['C3'] = c3;
+          }
+        }
+        if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
+          const expUelMd = getExpectedCupMatchdayForWeek('C3', currentWk);
+          if (hasEuropa && (expUelMd === null || (c3.matchday || 0) < expUelMd)) {
+            c3 = simulateSingleCupStage(c3, 'C3');
+            next['C3'] = c3;
+          }
+        }
+        return next;
+      });
+    }
+
+    setSeasonState(s => ({
+      ...s,
+      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
+    }));
+
     const ownStrength = cleanBase.att + cleanBase.opp + cleanBase.def;
     const rivalStrength = (careerRival?.att || 0) + (careerRival?.opp || 0) + (careerRival?.def || 0);
     // Plus de gesta: en tiers bajos, vencer o empatar a un equipo grande premia extra
@@ -5420,6 +5460,24 @@ function DiceFootballApp() {
     }
   };
 
+  // Helper para mapear la jornada esperada de copas europeas según la semana del calendario
+  const getExpectedCupMatchdayForWeek = (compId: string, week: number): number | null => {
+    if (compId === 'C1') {
+      const clMap: Record<number, number> = {
+        7: 1, 9: 2, 11: 3, 14: 4, 16: 5, 18: 6,
+        25: 7, 27: 8, 30: 9, 32: 10, 34: 11, 36: 12, 41: 13
+      };
+      return clMap[week] ?? null;
+    }
+    if (compId === 'C3') {
+      const uelMap: Record<number, number> = {
+        22: 1, 23: 2, 25: 3, 27: 4, 30: 5, 32: 6, 34: 7, 36: 8, 39: 9
+      };
+      return uelMap[week] ?? null;
+    }
+    return null;
+  };
+
   // Botón "Simular Semana": resuelve la jornada y fixtures correspondientes a la semana en TODAS las competiciones y ligas.
   // Si hay una carrera activa con partido pendiente en esta jornada, se juega asistido por la IA para el entrenador.
   const simulateSeasonWeek = () => {
@@ -5465,7 +5523,9 @@ function DiceFootballApp() {
             c1 = { ...next['C1'], ...autoData, id: 'C1', name: 'Champions League', type: 'cup' };
           }
         }
-        if (hasChampions && c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado') {
+        const expClMd = getExpectedCupMatchdayForWeek('C1', currentWk);
+        const canSimulateCl = hasChampions && c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado' && (expClMd === null || (c1.matchday || 0) < expClMd);
+        if (canSimulateCl) {
           c1 = simulateSingleCupStage(c1, 'C1');
           next['C1'] = c1;
         }
@@ -5487,7 +5547,9 @@ function DiceFootballApp() {
           }
         }
 
-        if (hasEuropa && c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
+        const expUelMd = getExpectedCupMatchdayForWeek('C3', currentWk);
+        const canSimulateUel = hasEuropa && c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado' && (expUelMd === null || (c3.matchday || 0) < expUelMd);
+        if (canSimulateUel) {
           c3 = simulateSingleCupStage(c3, 'C3');
           next['C3'] = c3;
         }
@@ -5496,10 +5558,10 @@ function DiceFootballApp() {
       });
     }
 
-    // 4. Incrementar la semana de la temporada (al pasar de 42 la temporada queda completada)
+    // 3. Incrementar la semana de la temporada (al pasar de 42 la temporada queda completada)
     setSeasonState(s => ({
       ...s,
-      currentWeek: (s.currentWeek || 1) + 1
+      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
     }));
   };
 
@@ -9633,7 +9695,7 @@ function DiceFootballApp() {
                             return (
                               <div key={mi} className='flex flex-col bg-black/30 p-3 rounded-2xl gap-2 border border-white/5'>
                                 <div className='flex items-center justify-between'>
-                                  <div className='flex items-center gap-2 w-28'><Shield color1={home?.color1} color2={home?.color2} initial={home?.name} size='xs' isFlag={home?.isFlag} /><span className={`text-[9px] font-bold uppercase truncate italic ${passWinner?.id === home?.id ? 'text-amber-300 font-black' : ''}`}>{home?.name || 'TBD'}</span></div>
+                                  <div className='flex items-center gap-2 w-28'><Shield color1={home?.color1} color2={home?.color2} initial={home?.name || '?'} size='xs' isFlag={home?.isFlag} /><span className={`text-[9px] font-bold uppercase truncate italic ${passWinner?.id === home?.id ? 'text-amber-300 font-black' : home ? 'text-slate-200' : 'text-slate-500'}`}>{home?.name || 'Por definir'}</span></div>
                                   <div className='flex flex-col items-center flex-1'>
                                     {isPlayedIda ? (
                                       <div className='flex flex-col items-center gap-0.5'>
@@ -9649,12 +9711,12 @@ function DiceFootballApp() {
                                       <span className='text-[8px] font-black text-slate-500 italic'>{isTwoLegged ? 'VS (Ida)' : 'VS'}</span>
                                     )}
                                   </div>
-                                  <div className='flex items-center gap-2 w-28 justify-end'><span className={`text-[9px] font-bold uppercase truncate italic text-right ${passWinner?.id === away?.id ? 'text-amber-300 font-black' : ''}`}>{away?.name || 'TBD'}</span><Shield color1={away?.color1} color2={away?.color2} initial={away?.name} size='xs' isFlag={away?.isFlag} /></div>
+                                  <div className='flex items-center gap-2 w-28 justify-end'><span className={`text-[9px] font-bold uppercase truncate italic text-right ${passWinner?.id === away?.id ? 'text-amber-300 font-black' : away ? 'text-slate-200' : 'text-slate-500'}`}>{away?.name || 'Por definir'}</span><Shield color1={away?.color1} color2={away?.color2} initial={away?.name || '?'} size='xs' isFlag={away?.isFlag} /></div>
                                 </div>
 
                                 {isTwoLegged && (
                                   <div className='flex items-center justify-between border-t border-white/10 pt-2'>
-                                    <div className='flex items-center gap-2 w-28'><Shield color1={away?.color1} color2={away?.color2} initial={away?.name} size='xs' isFlag={away?.isFlag} /><span className={`text-[9px] font-bold uppercase truncate italic ${passWinner?.id === away?.id ? 'text-amber-300 font-black' : ''}`}>{away?.name || 'TBD'}</span></div>
+                                    <div className='flex items-center gap-2 w-28'><Shield color1={away?.color1} color2={away?.color2} initial={away?.name || '?'} size='xs' isFlag={away?.isFlag} /><span className={`text-[9px] font-bold uppercase truncate italic ${passWinner?.id === away?.id ? 'text-amber-300 font-black' : away ? 'text-slate-200' : 'text-slate-500'}`}>{away?.name || 'Por definir'}</span></div>
                                     <div className='flex flex-col items-center flex-1'>
                                       {isPlayedVuelta ? (
                                         <div className='flex flex-col items-center'>
@@ -9666,7 +9728,7 @@ function DiceFootballApp() {
                                         </div>
                                       ) : <span className='text-[8px] font-black text-slate-500 italic'>VS (Vuelta)</span>}
                                     </div>
-                                    <div className='flex items-center gap-2 w-28 justify-end'><span className={`text-[9px] font-bold uppercase truncate italic text-right ${passWinner?.id === home?.id ? 'text-amber-300 font-black' : ''}`}>{home?.name || 'TBD'}</span><Shield color1={home?.color1} color2={home?.color2} initial={home?.name} size='xs' isFlag={home?.isFlag} /></div>
+                                    <div className='flex items-center gap-2 w-28 justify-end'><span className={`text-[9px] font-bold uppercase truncate italic text-right ${passWinner?.id === home?.id ? 'text-amber-300 font-black' : home ? 'text-slate-200' : 'text-slate-500'}`}>{home?.name || 'Por definir'}</span><Shield color1={home?.color1} color2={home?.color2} initial={home?.name || '?'} size='xs' isFlag={home?.isFlag} /></div>
                                   </div>
                                 )}
 
@@ -9746,9 +9808,9 @@ function DiceFootballApp() {
                           {/* Fila Equipo 1 */}
                           <div className='flex justify-between items-center py-0.5'>
                             <div className='flex items-center gap-1.5 flex-1 min-w-0 pr-1'>
-                              <Shield color1={h?.color1} color2={h?.color2} initial={h?.name} size='xs' isFlag={h?.isFlag} />
+                              <Shield color1={h?.color1} color2={h?.color2} initial={h?.name || '?'} size='xs' isFlag={h?.isFlag} />
                               <span className={`text-[9px] font-black uppercase italic truncate ${winner?.id === h?.id ? 'text-amber-300 font-black' : h ? 'text-slate-200' : 'text-slate-500'}`}>
-                                {h?.name || 'TBD'}
+                                {h?.name || 'Por definir'}
                               </span>
                             </div>
                             {isTwoLegged ? (
@@ -9775,9 +9837,9 @@ function DiceFootballApp() {
                           {/* Fila Equipo 2 */}
                           <div className='flex justify-between items-center py-0.5 border-t border-white/5'>
                             <div className='flex items-center gap-1.5 flex-1 min-w-0 pr-1'>
-                              <Shield color1={a?.color1} color2={a?.color2} initial={a?.name} size='xs' isFlag={a?.isFlag} />
+                              <Shield color1={a?.color1} color2={a?.color2} initial={a?.name || '?'} size='xs' isFlag={a?.isFlag} />
                               <span className={`text-[9px] font-black uppercase italic truncate ${winner?.id === a?.id ? 'text-amber-300 font-black' : a ? 'text-slate-200' : 'text-slate-500'}`}>
-                                {a?.name || 'TBD'}
+                                {a?.name || 'Por definir'}
                               </span>
                             </div>
                             {isTwoLegged ? (
@@ -10038,7 +10100,7 @@ function DiceFootballApp() {
                 worldPending={careerWorldPending}
                 onBack={() => setView('hub')}
                 onPlayMatch={startCareerMatch}
-                onSimulateMatch={simulateCareerMatchday}
+                onSimulateMatch={simulateSeasonWeek}
                 onSimulateWorld={simulateAllPendingLeagues}
                 onSimulateGlobalMatchday={simulateAllPendingLeagues}
                 onSimulateAllRemainingLeagues={simulateAllRemainingLeagues}
