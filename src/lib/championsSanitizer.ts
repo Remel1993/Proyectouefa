@@ -53,7 +53,9 @@ export const sanitizeChampionsBracket = (
     if (!Array.isArray(newBracket[p]) || newBracket[p].length === 0) return;
     const nextPhase = p === 'Dieciseisavos' ? 'Octavos' : p === 'Octavos' ? 'Cuartos' : p === 'Cuartos' ? 'Semis' : 'Final';
     const nextRound = Array.isArray(newBracket[nextPhase]) ? newBracket[nextPhase] : [newBracket[nextPhase]].filter(Boolean);
-    const hasAdvancedTeams = nextRound.some((nm: any) => nm && (nm.hId || nm.aId));
+    const hasAdvancedTeams = p === 'Dieciseisavos'
+      ? nextRound.some((nm: any) => nm && nm.hId !== null && nm.hId !== undefined)
+      : nextRound.some((nm: any) => nm && ((nm.hId !== null && nm.hId !== undefined) || (nm.aId !== null && nm.aId !== undefined)));
 
     newBracket[p] = newBracket[p].map((m: any, mIdx: number) => {
       if (!m) return m;
@@ -159,6 +161,11 @@ export const extractChampionsRepescados = (c1Comp: any): any[] => {
 export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => {
   if (!uelComp || !uelComp.teams) return uelComp;
   
+  // Si la Europa League ya disputó Dieciseisavos y ya avanzó a Octavos, Cuartos, Semis o Final, no alterar la llave
+  if (uelComp.phase && uelComp.phase !== 'Dieciseisavos' && (uelComp.matchday || 0) >= 2) {
+    return uelComp;
+  }
+
   const realRepescados = extractChampionsRepescados(c1Comp);
   if (realRepescados.length < 8) {
     return uelComp;
@@ -179,8 +186,10 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
     const isVueltaPlayed = updatedBracket.Dieciseisavos.every((m: any) => m && m.sh2 !== null && m.sh2 !== undefined);
     if (isVueltaPlayed) {
       dieciseisavosWinners = updatedBracket.Dieciseisavos.map((m: any) => {
-        const totH = (m.sh || 0) + (m.sa2 || 0);
-        const totA = (m.sa || 0) + (m.sh2 || 0);
+        // En la ida: m.sh (goles de m.hId), m.sa (goles de m.aId)
+        // En la vuelta: m.sh2 (goles de m.hId), m.sa2 (goles de m.aId)
+        const totH = (m.sh || 0) + (m.sh2 || 0);
+        const totA = (m.sa || 0) + (m.sa2 || 0);
         if (totH > totA) return m.hId;
         if (totA > totH) return m.aId;
         return (m.penH || 0) > (m.penA || 0) ? m.hId : m.aId;
@@ -191,13 +200,13 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
-      hId: dieciseisavosWinners[i] ?? m.hId ?? (i + 1),
+      hId: dieciseisavosWinners[i] ?? null,
       aId: 17 + i
     }));
   } else {
     updatedBracket.Octavos = Array(8).fill(0).map((_, i) => ({
       id: 'O' + (i + 1),
-      hId: dieciseisavosWinners[i] ?? (i + 1),
+      hId: dieciseisavosWinners[i] ?? null,
       aId: 17 + i,
       sh: null,
       sa: null,
