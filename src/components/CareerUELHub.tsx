@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award, CheckCircle, CheckCircle2, XCircle, Clock, Sparkles, Layers, ArrowLeft, RotateCcw, ShieldCheck, Dumbbell, Target, Globe, Flame } from 'lucide-react';
+import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award, CheckCircle, CheckCircle2, XCircle, Clock, Sparkles, Layers, ArrowLeft, RotateCcw, ShieldCheck, Dumbbell, Target, Globe, Flame, Lock, Swords } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { tacticalOptions, sameDist } from '../lib/career';
 
@@ -34,6 +34,9 @@ export interface CareerUELHubProps {
   onOpenDrill?: () => void;
   onOpenTraining?: () => void;
   onSetTactic?: (tactic: any) => void;
+  isEuropaDate?: boolean;
+  currentWeek?: number;
+  nextUelWeek?: number | null;
   ui: any;
 }
 
@@ -50,6 +53,9 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
   onOpenDrill,
   onOpenTraining,
   onSetTactic,
+  isEuropaDate = true,
+  currentWeek = 1,
+  nextUelWeek,
   ui
 }) => {
   const { Shield } = ui;
@@ -453,43 +459,80 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                   </div>
                 </div>
 
-                {/* Botones de Acción */}
-                <div className='grid grid-cols-2 gap-2 pt-1'>
-                  <button
-                    onClick={onPlayUelMatch}
-                    className='py-3.5 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black uppercase italic text-[11px] tracking-widest rounded-2xl shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 border border-amber-300/40'
-                  >
-                    <Dices size={16} /> Jugar Partido
-                  </button>
+                {/* Panel Informativo cuando no es fecha de Europa League */}
+                {!isEuropaDate ? (
+                  <div className='space-y-3 pt-1'>
+                    <div className='p-3.5 bg-gradient-to-r from-amber-950/50 via-slate-900/80 to-amber-950/40 border border-amber-500/30 rounded-2xl space-y-2 text-left'>
+                      <div className='flex items-center gap-2'>
+                        <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30'>
+                          Modo Informativo · Semana Oficial {nextUelWeek || 20}
+                        </span>
+                      </div>
+                      <p className='text-[10px] font-medium text-slate-300 leading-relaxed'>
+                        Tu eliminatoria de Europa League se disputará en la <strong>Semana {nextUelWeek || 20}</strong> del calendario oficial (Semana actual: <strong>{currentWeek}</strong>).
+                      </p>
+                    </div>
 
-                  <button
-                    onClick={onSimulateUelMatch}
-                    className='py-3.5 bg-slate-800/90 hover:bg-slate-700 text-amber-300 font-black uppercase italic text-[11px] tracking-widest rounded-2xl border border-amber-500/30 shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2'
-                  >
-                    <Zap size={16} /> Simular
-                  </button>
-                </div>
+                    <div className='grid grid-cols-2 gap-2'>
+                      <button
+                        onClick={() => setSubTab('bracket')}
+                        className='py-3 font-black uppercase italic text-[10px] tracking-wider rounded-2xl bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-400/30 active:scale-95 transition-all flex items-center justify-center gap-1.5'
+                      >
+                        <Swords size={13} className='text-amber-300' />
+                        <span>Ver Cuadro</span>
+                      </button>
+                      <button
+                        onClick={() => setSubTab('schedule')}
+                        className='py-3 font-black uppercase italic text-[10px] tracking-wider rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 active:scale-95 transition-all flex items-center justify-center gap-1.5'
+                      >
+                        <Calendar size={13} className='text-slate-300' />
+                        <span>Ver Calendario</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Botones de Acción */}
+                    <div className='grid grid-cols-2 gap-2 pt-1'>
+                      <button
+                        onClick={onPlayUelMatch}
+                        className='py-3.5 font-black uppercase italic text-[11px] tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 border bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 shadow-xl active:scale-95 border-amber-300/40 cursor-pointer'
+                      >
+                        <Dices size={16} />
+                        <span>Jugar Partido</span>
+                      </button>
 
-                {/* Acciones de Preparación Pre-Partido */}
-                <div className='grid grid-cols-2 gap-2 pt-1 border-t border-white/5'>
-                  {onOpenDrill && (
-                    <button
-                      onClick={onOpenDrill}
-                      className='py-2 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-[8px] font-black uppercase italic tracking-wider border border-white/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all'
-                    >
-                      <Dumbbell size={11} className='text-amber-400' /> Minijuego Pre-Partido
-                    </button>
-                  )}
+                      <button
+                        onClick={onSimulateUelMatch}
+                        className='py-3.5 font-black uppercase italic text-[11px] tracking-widest rounded-2xl border transition-all flex items-center justify-center gap-2 bg-slate-800/90 hover:bg-slate-700 text-amber-300 border-amber-500/30 shadow-lg active:scale-95 cursor-pointer'
+                      >
+                        <Zap size={16} />
+                        <span>Simular</span>
+                      </button>
+                    </div>
 
-                  {onOpenTraining && (
-                    <button
-                      onClick={onOpenTraining}
-                      className='py-2 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-[8px] font-black uppercase italic tracking-wider border border-white/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all'
-                    >
-                      <Zap size={11} className='text-orange-400' /> Sesión de Entrenamiento
-                    </button>
-                  )}
-                </div>
+                    {/* Acciones de Preparación Pre-Partido */}
+                    <div className='grid grid-cols-2 gap-2 pt-1 border-t border-white/5'>
+                      {onOpenDrill && (
+                        <button
+                          onClick={onOpenDrill}
+                          className='py-2 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-[8px] font-black uppercase italic tracking-wider border border-white/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all'
+                        >
+                          <Dumbbell size={11} className='text-amber-400' /> Minijuego Pre-Partido
+                        </button>
+                      )}
+
+                      {onOpenTraining && (
+                        <button
+                          onClick={onOpenTraining}
+                          className='py-2 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-[8px] font-black uppercase italic tracking-wider border border-white/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all'
+                        >
+                          <Zap size={11} className='text-orange-400' /> Sesión de Entrenamiento
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 

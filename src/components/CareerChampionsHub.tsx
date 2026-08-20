@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award, CheckCircle, CheckCircle2, XCircle, Clock, Sparkles, Layers, ArrowLeft, RotateCcw, ShieldCheck, Dumbbell, Target } from 'lucide-react';
+import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award, CheckCircle, CheckCircle2, XCircle, Clock, Sparkles, Layers, ArrowLeft, RotateCcw, ShieldCheck, Dumbbell, Target, Lock, BarChart3, Swords } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clPhaseLabel, getChampionsObjectiveTarget, CL_PHASE_ORDER, tacticalOptions, sameDist, generateLeagueSchedule, getChampionsMatchKey } from '../lib/career';
 import { sanitizeChampionsBracket } from '../lib/championsSanitizer';
@@ -17,6 +17,9 @@ interface CareerChampionsHubProps {
   onOpenDrill?: () => void;
   onOpenTraining?: () => void;
   onSetTactic?: (tactic: any) => void;
+  isChampionsDate?: boolean;
+  currentWeek?: number;
+  nextClWeek?: number | null;
   ui: any;
 }
 
@@ -33,6 +36,9 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
   onOpenDrill,
   onOpenTraining,
   onSetTactic,
+  isChampionsDate = true,
+  currentWeek = 1,
+  nextClWeek,
   ui
 }) => {
   const { Shield } = ui;
@@ -817,24 +823,64 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                   </div>
                 </div>
 
-                {/* Acciones de Partido */}
-                <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
-                  <button
-                    onClick={onPlayChampionsMatch}
-                    className='w-full bg-slate-900/50 hover:bg-slate-800/60 backdrop-blur-md text-white py-4 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 border border-blue-400/30'
-                  >
-                    <Dices size={16} className='text-slate-300' />
-                    Jugar Partido con Dados
-                  </button>
+                {/* Panel Informativo cuando no es fecha de Champions League */}
+                {!isChampionsDate ? (
+                  <div className='space-y-3 pt-1'>
+                    <div className='p-3.5 bg-gradient-to-r from-blue-950/50 via-slate-900/80 to-blue-950/40 border border-blue-500/30 rounded-2xl space-y-2 text-left'>
+                      <div className='flex items-center gap-2'>
+                        <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30'>
+                          Modo Informativo · Semana Oficial {nextClWeek || 7}
+                        </span>
+                      </div>
+                      <p className='text-[10px] font-medium text-slate-300 leading-relaxed'>
+                        Tu partido de Champions League se disputará en la <strong>Semana {nextClWeek || 7}</strong> del calendario oficial UEFA (Semana actual: <strong>{currentWeek}</strong>).
+                      </p>
+                    </div>
 
-                  <button
-                    onClick={onSimulateChampionsMatch}
-                    className='w-full bg-slate-800 hover:bg-slate-700 text-slate-200 py-4 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all border border-white/10 flex items-center justify-center gap-2'
-                  >
-                    <Zap size={16} className='text-amber-400' />
-                    Simular Partido Rápido
-                  </button>
-                </div>
+                    <div className='grid grid-cols-3 gap-2'>
+                      <button
+                        onClick={() => setSubTab('groups')}
+                        className='py-3 font-black uppercase italic text-[9px] tracking-wider rounded-2xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 active:scale-95 transition-all flex items-center justify-center gap-1'
+                      >
+                        <BarChart3 size={12} className='text-blue-300' />
+                        <span>Grupos</span>
+                      </button>
+                      <button
+                        onClick={() => setSubTab('bracket')}
+                        className='py-3 font-black uppercase italic text-[9px] tracking-wider rounded-2xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-400/30 active:scale-95 transition-all flex items-center justify-center gap-1'
+                      >
+                        <Swords size={12} className='text-purple-300' />
+                        <span>Cuadro</span>
+                      </button>
+                      <button
+                        onClick={() => setSubTab('schedule')}
+                        className='py-3 font-black uppercase italic text-[9px] tracking-wider rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 active:scale-95 transition-all flex items-center justify-center gap-1'
+                      >
+                        <Calendar size={12} className='text-slate-300' />
+                        <span>Calendario</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Acciones de Partido cuando sí es fecha UEFA */
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
+                    <button
+                      onClick={onPlayChampionsMatch}
+                      className='w-full py-4 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border bg-slate-900/50 hover:bg-slate-800/60 backdrop-blur-md text-white border-blue-400/30 active:scale-95 cursor-pointer shadow-lg'
+                    >
+                      <Dices size={16} className='text-slate-300' />
+                      <span>Jugar Partido con Dados</span>
+                    </button>
+
+                    <button
+                      onClick={onSimulateChampionsMatch}
+                      className='w-full py-4 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all border flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border-white/10 active:scale-95 cursor-pointer shadow-lg'
+                    >
+                      <Zap size={16} className='text-amber-400' />
+                      <span>Simular Partido Rápido</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : isNotQualified ? (
               <div className='bg-slate-900/80 rounded-3xl p-6 text-center space-y-4 border border-white/10 shadow-xl'>

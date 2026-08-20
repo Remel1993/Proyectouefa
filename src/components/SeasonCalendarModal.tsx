@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  X, Calendar, Trophy, Shield as ShieldIcon, Globe, Sparkles, 
+  X, Calendar, Trophy, Shield as ShieldIcon, Sparkles, 
   CheckCircle, Clock, ChevronRight, AlertCircle, Briefcase, Flame, Layers
 } from 'lucide-react';
 import { SEASON_CALENDAR_42_WEEKS, SemanaCalendario, Fixture, Competicion, Slot } from '../lib/seasonCalendar';
@@ -51,12 +51,6 @@ export const SeasonCalendarModal: React.FC<SeasonCalendarModalProps> = ({
           label: 'Europa League',
           bg: 'bg-amber-950/70 border-amber-500/40 text-amber-300',
           icon: <CompetitionLogo compId="C3" size={13} showBackground={false} />
-        };
-      case 'SELECCIONES':
-        return {
-          label: 'Selecciones',
-          bg: 'bg-cyan-950/70 border-cyan-500/40 text-cyan-300',
-          icon: <Globe size={11} className="text-cyan-400" />
         };
       case 'LIGA':
       default:
@@ -155,16 +149,6 @@ export const SeasonCalendarModal: React.FC<SeasonCalendarModalProps> = ({
               }`}
             >
               <CompetitionLogo compId="C3" size={12} showBackground={false} /> Europa League
-            </button>
-            <button
-              onClick={() => setActiveFilter('SELECCIONES')}
-              className={`px-3 py-1.5 rounded-xl border transition-all shrink-0 flex items-center gap-1.5 ${
-                activeFilter === 'SELECCIONES'
-                  ? 'bg-cyan-600 border-cyan-400 text-white shadow-md'
-                  : 'bg-slate-900/60 border-white/10 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Globe size={12} /> Selecciones
             </button>
           </div>
 
