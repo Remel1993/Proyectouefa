@@ -1,19 +1,8 @@
 // @ts-nocheck
 import { Star, Trophy } from "lucide-react";
-import { useState, useMemo, useSyncExternalStore } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { getTopWinners, subscribeTitles, type WinnerRow } from "@/lib/palmares";
 import { getCountryCode } from "@/lib/countries";
-
-const getTeamLogoSlug = (name?: string): string => {
-  if (!name) return "";
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/g, "_")
-    .replace(/_+/g, "_")
-    .replace(/^_|_$/g, "");
-};
 
 const useTitlesVersion = () =>
   useSyncExternalStore(
@@ -44,7 +33,7 @@ const Stars = ({ count }: { count: number }) => (
   </div>
 );
 
-/** Escudo/logo/bandera compacto para la tabla de máximos ganadores. */
+/** Escudo/bandera compacto para la tabla de máximos ganadores. */
 const Crest = ({
   name,
   color1,
@@ -57,8 +46,6 @@ const Crest = ({
   isFlag?: boolean | undefined;
 }) => {
   const initial = name ? name[0] : "?";
-  const [logoFailed, setLogoFailed] = useState(false);
-
   if (isFlag) {
     const code = getCountryCode(name);
     if (code) {
@@ -90,27 +77,10 @@ const Crest = ({
       </div>
     );
   }
-
-  const slug = getTeamLogoSlug(name);
-  const potentialLogo = slug ? `/crests/${slug}.png` : null;
-
-  if (potentialLogo && !logoFailed) {
-    return (
-      <div className="relative flex h-8 w-8 shrink-0 items-center justify-center p-0.5">
-        <img
-          src={potentialLogo}
-          alt={name || "Escudo"}
-          className="h-full w-full object-contain drop-shadow-md"
-          onError={() => setLogoFailed(true)}
-        />
-      </div>
-    );
-  }
-
   return (
     <div
-      className="relative h-8 w-7 shrink-0 overflow-hidden shadow-md rounded-lg border border-white/10"
-      style={{ backgroundColor: color1 || "#1e293b" }}
+      className="relative h-9 w-7 shrink-0 overflow-hidden shadow-md"
+      style={{ clipPath: "polygon(0% 0%, 100% 0%, 100% 80%, 50% 100%, 0% 80%)" }}
     >
       <div className="absolute inset-0 flex">
         <div className="h-full w-1/2" style={{ backgroundColor: color1 || "#333" }} />

@@ -3,7 +3,6 @@ import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award
 import { motion, AnimatePresence } from 'motion/react';
 import { clPhaseLabel, getChampionsObjectiveTarget, CL_PHASE_ORDER, tacticalOptions, sameDist, generateLeagueSchedule, getChampionsMatchKey } from '../lib/career';
 import { sanitizeChampionsBracket } from '../lib/championsSanitizer';
-import { SimulationFeedbackBanner } from './SimulationFeedbackBanner';
 
 interface CareerChampionsHubProps {
   career: any;
@@ -18,7 +17,6 @@ interface CareerChampionsHubProps {
   onOpenDrill?: () => void;
   onOpenTraining?: () => void;
   onSetTactic?: (tactic: any) => void;
-  onDismissSimulationFeedback?: () => void;
   ui: any;
 }
 
@@ -35,7 +33,6 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
   onOpenDrill,
   onOpenTraining,
   onSetTactic,
-  onDismissSimulationFeedback,
   ui
 }) => {
   const { Shield } = ui;
@@ -51,23 +48,12 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
 
   const phase = clComp?.phase || 'groups';
   const matchday = clComp?.matchday || 0;
+  const isFinished = clComp?.showWinner || phase === 'Terminado';
 
   // Bracket seguro y auto-reparado con formato oficial UEFA (ida y vuelta en Octavos/Cuartos/Semis, partido único en Final)
   const safeBracket = useMemo(() => {
-    return sanitizeChampionsBracket(clComp?.bracket, clComp?.teams, phase) || clComp?.bracket;
-  }, [clComp?.bracket, clComp?.teams, phase]);
-
-  const isFinished = useMemo(() => {
-    if (clComp?.showWinner || phase === 'Terminado') return true;
-    const finalMatch = safeBracket?.Final?.[0] || safeBracket?.Final || clComp?.bracket?.Final?.[0] || clComp?.bracket?.Final;
-    if (finalMatch && finalMatch.sh !== null && finalMatch.sh !== undefined && finalMatch.sa !== null && finalMatch.sa !== undefined) {
-      return true;
-    }
-    if (Array.isArray(clComp?.history) && clComp.history.some((h: any) => h.day === 'Gran Final' || (typeof h.day === 'string' && h.day.includes('Final')))) {
-      return true;
-    }
-    return false;
-  }, [clComp?.showWinner, clComp?.bracket, clComp?.history, phase, safeBracket]);
+    return sanitizeChampionsBracket(clComp?.bracket, clComp?.teams) || clComp?.bracket;
+  }, [clComp?.bracket, clComp?.teams]);
 
   // Base táctica y opciones
   const baseTactic = useMemo(() => ({
@@ -136,26 +122,27 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
 
           // Detectar si fue partido de eliminatoria de ida y vuelta
           let aggregateInfo: any = null;
-          const dayStr = typeof h.day === 'number' ? `Jornada ${h.day}` : String(h.day ?? '');
-          const isKnockout = ['Octavos', 'Cuartos', 'Semis'].some(p => dayStr.includes(p));
-          const phaseKey = ['Octavos', 'Cuartos', 'Semis'].find(p => dayStr.includes(p));
+          const isKnockout = ['Octavos', 'Cuartos', 'Semis'].some(p => (h.day || '').includes(p));
+          const phaseKey = ['Octavos', 'Cuartos', 'Semis'].find(p => (h.day || '').includes(p));
           
           if (isKnockout && phaseKey && safeBracket?.[phaseKey]) {
             const bMatches = Array.isArray(safeBracket[phaseKey]) ? safeBracket[phaseKey] : [safeBracket[phaseKey]];
             const bMatch = bMatches.find((bm: any) => bm && (bm.hId === userClId || bm.aId === userClId));
             if (bMatch && bMatch.sh !== null) {
               const hasVuelta = bMatch.sh2 !== null && bMatch.sh2 !== undefined;
-              const isVuelta = dayStr.includes('Vuelta') || hasVuelta;
+              const isVuelta = (h.day || '').includes('Vuelta') || hasVuelta;
 
-              // En la ida: bMatch.hId es Local (goles: bMatch.sh), bMatch.aId es Visitante (goles: bMatch.sa)
-              // En la vuelta: bMatch.aId es Local (goles: bMatch.sa2), bMatch.hId es Visitante (goles: bMatch.sh2)
+              // En la ida: hId es Local, aId es Visitante
+              // En la vuelta: aId es Local (recibe la vuelta), hId es Visitante
               // Totales globales:
-              // bMatch.hId: goles en ida (sh) + goles en vuelta (sh2)
-              // bMatch.aId: goles en ida (sa) + goles en vuelta (sa2)
-              const totHId = (bMatch.sh || 0) + (bMatch.sh2 || 0);
-              const totAId = (bMatch.sa || 0) + (bMatch.sa2 || 0);
+              // hId: goles en ida (sh) + goles en vuelta (sa2)
+              // aId: goles en ida (sa) + goles en vuelta (sh2)
+              const totHId = (bMatch.sh || 0) + (bMatch.sa2 || 0);
+              const totAId = (bMatch.sa || 0) + (bMatch.sh2 || 0);
 
               // Alinear el resultado global de cara al escudo mostrado a la izquierda y derecha en este partido
+              const leftTotal = isVuelta ? totAId : (bMatch.sh || 0);
+              const rightTotal = isVuelta ? totHId : (bMatch.sa || 0);
               const globalLeft = isVuelta ? totAId : totHId;
               const globalRight = isVuelta ? totHId : totAId;
 
@@ -165,19 +152,12 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 if (totHId > totAId) winnerId = bMatch.hId;
                 else if (totAId > totHId) winnerId = bMatch.aId;
                 else if (bMatch.penH !== null && bMatch.penH !== undefined) {
-                  // bMatch.penH pertenece a bMatch.hId y bMatch.penA pertenece a bMatch.aId
-                  winnerId = (bMatch.penH || 0) > (bMatch.penA || 0) ? bMatch.hId : bMatch.aId;
+                  // penH es del local de vuelta (aId), penA es del visitante de vuelta (hId)
+                  winnerId = bMatch.penH > bMatch.penA ? bMatch.aId : bMatch.hId;
                 }
                 if (winnerId !== null) {
                   qualified = winnerId === userClId;
                 }
-              }
-
-              let penaltiesText = null;
-              if (hasVuelta && bMatch.penH !== null && bMatch.penH !== undefined && bMatch.penA !== null && bMatch.penA !== undefined) {
-                const penLeft = isVuelta ? bMatch.penA : bMatch.penH;
-                const penRight = isVuelta ? bMatch.penH : bMatch.penA;
-                penaltiesText = `(${penLeft}-${penRight} pen.)`;
               }
 
               aggregateInfo = {
@@ -185,10 +165,10 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 isVuelta,
                 leg1Score: `${bMatch.sh} - ${bMatch.sa}`,
                 leg2Score: hasVuelta ? `${bMatch.sh2} - ${bMatch.sa2}` : null,
-                leftTotal: globalLeft,
-                rightTotal: globalRight,
+                leftTotal,
+                rightTotal,
                 globalScoreText: hasVuelta ? `${globalLeft} - ${globalRight}` : `${bMatch.sh} - ${bMatch.sa}`,
-                penaltiesText,
+                penaltiesText: (bMatch.penH !== null && bMatch.penH !== undefined) ? `(${bMatch.penH}-${bMatch.penA} pen.)` : null,
                 qualified
               };
             }
@@ -197,7 +177,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
           const clLogEntry = (career.seasonLog || []).find((l: any) => l.isChampions);
 
           historyMatch = {
-            dayLabel: typeof h.day === 'number' ? `Jornada ${h.day}` : String(h.day ?? ''),
+            dayLabel: h.day,
             home: ht,
             away: at,
             isHome,
@@ -457,10 +437,6 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 <div className='bg-gradient-to-r from-yellow-500 to-amber-500 text-slate-950 font-black text-[9px] uppercase px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 animate-bounce'>
                   <Trophy size={12} /> Campeón 🏆
                 </div>
-              ) : (isFinalist && isFinished) ? (
-                <div className='bg-slate-700/80 text-slate-200 border border-slate-400/40 font-black text-[9px] uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5'>
-                  <Trophy size={11} className='text-slate-300' /> Subcampeón 🥈
-                </div>
               ) : isNotQualified ? (
                 <div className='bg-slate-800/80 text-slate-400 border border-white/10 font-black text-[9px] uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5'>
                   <XCircle size={11} className='text-slate-400' /> No Clasificado
@@ -468,10 +444,6 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
               ) : isAlive ? (
                 <div className='bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black text-[9px] uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5'>
                   <Sparkles size={11} className='animate-spin' /> {clPhaseLabel(phase)}
-                </div>
-              ) : isFinished ? (
-                <div className='bg-blue-500/20 text-blue-300 border border-blue-500/30 font-black text-[9px] uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5'>
-                  <CheckCircle2 size={11} /> Concluido
                 </div>
               ) : (
                 <div className='bg-red-500/20 text-red-300 border border-red-500/30 font-black text-[9px] uppercase px-3 py-1.5 rounded-full flex items-center gap-1.5'>
@@ -596,14 +568,6 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
             exit={{ opacity: 0, y: -10 }}
             className='space-y-4'
           >
-            {/* FEEDBACK INLINE DE SIMULACIÓN / RESULTADO */}
-            {career.lastSimulationFeedback && (
-              <SimulationFeedbackBanner
-                feedback={career.lastSimulationFeedback}
-                onDismiss={onDismissSimulationFeedback}
-              />
-            )}
-
             {/* SECCIÓN 1: ÚLTIMO PARTIDO JUGADO EN CHAMPIONS (CON RESULTADO) */}
             {lastPlayedChampionsMatch && (
               <div className='bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-blue-950/40 rounded-3xl p-4 border border-blue-500/30 shadow-lg space-y-2.5'>
@@ -693,12 +657,8 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 )}
 
                 <div className='flex items-center justify-between text-[8px] font-bold text-slate-400 px-1'>
-                  <span className='flex items-center gap-1'>
-                    Balance Continental: <strong className={(lastPlayedChampionsMatch.pe || 0) > 0 ? 'text-emerald-400 font-black' : 'text-slate-400 font-bold'}>+{(lastPlayedChampionsMatch.pe || 0)} PE ganados</strong>
-                  </span>
-                  <span className={(lastPlayedChampionsMatch.rep || 0) > 0 ? 'text-emerald-400 font-black' : (lastPlayedChampionsMatch.rep || 0) < 0 ? 'text-rose-400 font-black' : 'text-slate-400 font-bold'}>
-                    {(lastPlayedChampionsMatch.rep || 0) > 0 ? `+${lastPlayedChampionsMatch.rep}` : (lastPlayedChampionsMatch.rep || 0)} Reputación
-                  </span>
+                  <span>Balance Continental: +{lastPlayedChampionsMatch.pe || 0} PE ganados</span>
+                  <span className='text-amber-400 font-black'>+{lastPlayedChampionsMatch.rep || 0} Reputación</span>
                 </div>
               </div>
             )}
@@ -713,31 +673,19 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 <div className='flex justify-center gap-3 pt-2'>
                   <div className='bg-black/40 px-4 py-2 rounded-2xl border border-yellow-500/30 text-center'>
                     <p className='text-[8px] font-black uppercase text-yellow-400'>Recompensa Mánager</p>
-                    <p className='text-sm font-black text-white'>
-                      <strong className='text-emerald-400 font-black'>+10 PE</strong> · <strong className='text-emerald-400 font-black'>+8.0 Rep</strong>
-                    </p>
+                    <p className='text-sm font-black text-white'>+10 PE · +8.0 Rep</p>
                   </div>
                 </div>
-                <div className='flex flex-col sm:flex-row gap-2 justify-center pt-2'>
-                  {onOpenNewSeason && (
-                    <button
-                      onClick={onOpenNewSeason}
-                      className='bg-gradient-to-r from-yellow-500 to-amber-600 text-slate-950 px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2'
-                    >
-                      <RotateCcw size={15} /> Iniciar Nueva Temporada Global
-                    </button>
-                  )}
-                  {onBackToCareer && (
-                    <button
-                      onClick={onBackToCareer}
-                      className='bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest border border-white/10 active:scale-95 transition-all'
-                    >
-                      Volver a la Liga Nacional
-                    </button>
-                  )}
-                </div>
+                {onOpenNewSeason && (
+                  <button
+                    onClick={onOpenNewSeason}
+                    className='w-full bg-gradient-to-r from-yellow-500 to-amber-600 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2'
+                  >
+                    <RotateCcw size={15} /> Iniciar Nueva Temporada Global
+                  </button>
+                )}
               </div>
-            ) : currentMatchData && !isFinished ? (
+            ) : currentMatchData ? (
               <div className='bg-slate-900/80 rounded-3xl p-5 border border-blue-500/30 space-y-4 shadow-xl'>
                 <div className='flex items-center justify-between'>
                   <div className='flex items-center gap-2'>
@@ -949,46 +897,8 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 <div className='flex justify-center gap-3 pt-1'>
                   <div className='bg-black/40 px-4 py-2 rounded-2xl border border-slate-500/30 text-center'>
                     <p className='text-[8px] font-black uppercase text-slate-400'>Recompensa Mánager</p>
-                    <p className='text-xs font-black text-white'>
-                      <strong className='text-emerald-400 font-black'>+6 PE</strong> · <strong className='text-emerald-400 font-black'>+4.5 Reputación</strong>
-                    </p>
+                    <p className='text-xs font-black text-white'>+6 PE · +4.5 Reputación</p>
                   </div>
-                </div>
-
-                <div className='flex flex-col sm:flex-row gap-2 justify-center pt-2'>
-                  {onOpenNewSeason && (
-                    <button
-                      onClick={onOpenNewSeason}
-                      className='bg-gradient-to-r from-yellow-500 to-amber-600 text-slate-950 px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2'
-                    >
-                      <RotateCcw size={15} /> Iniciar Nueva Temporada Global
-                    </button>
-                  )}
-                  {onBackToCareer && (
-                    <button
-                      onClick={onBackToCareer}
-                      className='bg-slate-800 hover:bg-slate-700 text-slate-200 px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest border border-white/10 active:scale-95 transition-all'
-                    >
-                      Volver a la Liga Nacional
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : isFinished ? (
-              <div className='bg-slate-900/80 rounded-3xl p-6 text-center space-y-4 border border-blue-500/30 shadow-xl'>
-                <div className='w-14 h-14 rounded-2xl bg-slate-800/80 border border-white/10 flex items-center justify-center mx-auto shadow-inner'>
-                  <Trophy size={32} className='text-amber-400' />
-                </div>
-                <div>
-                  <span className='text-[8px] font-black uppercase tracking-widest text-amber-400 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30'>
-                    Temporada Continental Finalizada
-                  </span>
-                  <h3 className='text-sm font-black uppercase italic text-white mt-2'>
-                    Torneo Continental Concluido
-                  </h3>
-                  <p className='text-xs font-bold text-slate-300 max-w-sm mx-auto mt-1 leading-relaxed'>
-                    La UEFA Champions League ha llegado a su fin. Todos los partidos y la Gran Final se han disputado. Regresa a tu Liga Nacional para continuar tu trayectoria.
-                  </p>
                 </div>
 
                 <div className='flex flex-col sm:flex-row gap-2 justify-center pt-2'>
@@ -1015,13 +925,15 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 <XCircle size={40} className='text-red-400 mx-auto' />
                 <div>
                   <span className='text-[8px] font-black uppercase tracking-widest text-red-400 bg-red-500/10 px-3 py-1 rounded-full border border-red-500/30'>
-                    Eliminado de la Competición
+                    {isFinished ? 'Temporada Continental Finalizada' : 'Eliminado de la Competición'}
                   </span>
                   <h3 className='text-sm font-black uppercase italic text-white mt-2'>
-                    Tu Club Ha Sido Eliminado
+                    {isFinished ? 'Torneo Continental Concluido' : 'Tu Club Ha Sido Eliminado'}
                   </h3>
                   <p className='text-xs font-bold text-slate-300 max-w-sm mx-auto mt-1 leading-relaxed'>
-                    Tu equipo ha quedado fuera de la Champions League esta temporada. Puedes simular el resto del torneo para ver al campeón o regresar a competir en tu Liga Nacional.
+                    {isFinished
+                      ? 'La UEFA Champions League ha llegado a su fin. Puedes revisar el cuadro de honor y la tabla final o iniciar la nueva temporada global.'
+                      : 'Tu equipo ha quedado fuera de la Champions League esta temporada. Puedes simular el resto del torneo para ver al campeón o regresar a competir en tu Liga Nacional.'}
                   </p>
                 </div>
 
@@ -1500,8 +1412,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
           >
             {clComp.history?.length > 0 ? (
               clComp.history.map((h: any, i: number) => {
-                const dayStr = typeof h.day === 'number' ? `Jornada ${h.day}` : String(h.day ?? '');
-                const isKnockoutDay = ['Octavos', 'Cuartos', 'Semis', 'Final'].some(k => dayStr.includes(k));
+                const isKnockoutDay = ['Octavos', 'Cuartos', 'Semis', 'Final'].some(k => (h.day || '').includes(k));
                 return (
                   <div key={i} className='bg-slate-900/80 rounded-3xl p-4 border border-white/10 space-y-3 shadow-lg'>
                     <div className='flex items-center justify-between pb-2 border-b border-white/5'>
@@ -1511,7 +1422,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                             : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                         }`}>
-                          {dayStr}
+                          {h.day}
                         </span>
                       </div>
                       <span className='text-[8px] font-bold text-slate-400'>
