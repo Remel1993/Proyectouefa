@@ -19,7 +19,7 @@ export const getClSpots = (compId?: string) => compId === 'L7' ? 8 : 4;
 export const LEAGUE_CLASS = {
   L1: 'A', L2: 'A', L3: 'A', L4: 'A', // Élite
   L6: 'B', L5: 'B',                   // Estratégica / consolidación
-  L7: 'C'                             // Desarrollo
+  L7: 'C', L8: 'C'                    // Desarrollo
 };
 
 export const CLASS_INFO = {
@@ -342,8 +342,9 @@ export const getContractObjectivesForTeam = ({
 
 export const seasonObjectives = ({
   tier, div, position, expected, wins = 0, draws = 0, played = 0, totalRounds = 0,
-  reputation = 10, pe = 0, total = 20, clQualified = false, clPhase = null, clChampion = false, clEliminated = false
-}) => {
+  reputation = 10, pe = 0, total = 20, clQualified = false, clPhase = null, clChampion = false, clEliminated = false,
+  career = null, compId = null
+}: any = {}) => {
   const size = total || 20;
   const exp = Math.max(1, Math.min(size, expected || Math.ceil(size / 2)));
   const rounds = totalRounds || Math.max(played, (size - 1) * 2);
@@ -591,7 +592,7 @@ export const seasonObjectives = ({
       rewardRep: clTarget.rep
     });
   } else if (div === 1 && tier >= 3) {
-    const spots = getClSpots(career?.compId);
+    const spots = getClSpots(compId || career?.compId);
     const isClSpot = played > 0 && !!position && position <= spots;
     const isFailed = played >= rounds && !isClSpot;
     items.push({
