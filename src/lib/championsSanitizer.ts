@@ -153,7 +153,8 @@ export const extractChampionsRepescados = (c1Comp: any): any[] => {
 };
 
 /**
- * Inyecta los 8 repescados reales de Champions League en la estructura de UEFA Europa League (C3).
+ * Inyecta los 8 repescados reales de Champions League en la estructura de UEFA Europa League (C3)
+ * y sincroniza las llaves de Octavos de Final con los ganadores de Dieciseisavos.
  */
 export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => {
   if (!uelComp || !uelComp.teams) return uelComp;
@@ -171,17 +172,67 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
 
   // Actualizar el bracket de Octavos para que 'aId' apunte fielmente a los IDs 17..24
   const updatedBracket = { ...(uelComp.bracket || {}) };
-  if (Array.isArray(updatedBracket.Octavos)) {
+  
+  // Verificar si Dieciseisavos ya se disputó para poblar hId con los clasificados
+  let dieciseisavosWinners: (number | null)[] = Array(8).fill(null);
+  if (Array.isArray(updatedBracket.Dieciseisavos) && updatedBracket.Dieciseisavos.length === 8) {
+    const isVueltaPlayed = updatedBracket.Dieciseisavos.every((m: any) => m && m.sh2 !== null && m.sh2 !== undefined);
+    if (isVueltaPlayed) {
+      dieciseisavosWinners = updatedBracket.Dieciseisavos.map((m: any) => {
+        const totH = (m.sh || 0) + (m.sa2 || 0);
+        const totA = (m.sa || 0) + (m.sh2 || 0);
+        if (totH > totA) return m.hId;
+        if (totA > totH) return m.aId;
+        return (m.penH || 0) > (m.penA || 0) ? m.hId : m.aId;
+      });
+    }
+  }
+
+  if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
+      hId: dieciseisavosWinners[i] ?? m.hId ?? (i + 1),
       aId: 17 + i
     }));
+  } else {
+    updatedBracket.Octavos = Array(8).fill(0).map((_, i) => ({
+      id: 'O' + (i + 1),
+      hId: dieciseisavosWinners[i] ?? (i + 1),
+      aId: 17 + i,
+      sh: null,
+      sa: null,
+      sh2: null,
+      sa2: null,
+      penH: null,
+      penA: null
+    }));
+  }
+
+  // Detectar si el equipo del usuario / modo carrera finalizó 3.º en Champions League
+  let careerTeamId = uelComp.careerTeamId;
+  let userTeamId = uelComp.userTeamId;
+  let careerTeamName = uelComp.careerTeamName;
+
+  const userRepescado = realRepescados.find((r: any) => 
+    (c1Comp.careerTeamId && r.id === c1Comp.careerTeamId) ||
+    (c1Comp.userTeamId && r.id === c1Comp.userTeamId) ||
+    (c1Comp.careerTeamName && r.name === c1Comp.careerTeamName) ||
+    (c1Comp.userTeamName && r.name === c1Comp.userTeamName)
+  );
+
+  if (userRepescado) {
+    careerTeamId = userRepescado.id;
+    userTeamId = userRepescado.id;
+    careerTeamName = userRepescado.name;
   }
 
   return {
     ...uelComp,
     teams: updatedTeams,
-    bracket: updatedBracket
+    bracket: updatedBracket,
+    careerTeamId: careerTeamId ?? uelComp.careerTeamId,
+    userTeamId: userTeamId ?? uelComp.userTeamId,
+    careerTeamName: careerTeamName ?? uelComp.careerTeamName
   };
 };
 
