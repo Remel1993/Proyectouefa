@@ -6,7 +6,7 @@ import {
   Briefcase, Target, Sparkles, AlertTriangle, AlertOctagon, Trash2, Check, X, Globe, History, Newspaper, Play,
   FileSignature, ShieldCheck, Pencil, CalendarPlus, Dumbbell, Zap, HeartPulse,
   Calendar, Award, ArrowUp, ArrowDown, Minus, CheckCircle, XCircle, ArrowRight, Lock,
-  Plane, Mail, FastForward, Clock, RotateCcw
+  Plane, Mail, FastForward, Clock, RotateCcw, Flame
 } from 'lucide-react';
 import {
   TIERS, CLASS_INFO, classOf, tierCaps, tacticalOptions, sameDist, peCostFor,
@@ -24,6 +24,7 @@ import { CareerLegendProfile } from './CareerLegendProfile';
 import { EndSeasonModal } from './EndSeasonModal';
 import { ApplicationResolutionModal } from './ApplicationResolutionModal';
 import { CareerChampionsHub } from './CareerChampionsHub';
+import { CareerUELHub } from './CareerUELHub';
 import { DeleteCareerModal } from './DeleteCareerModal';
 import { CareerHistoryArchiveModal } from './CareerHistoryArchiveModal';
 
@@ -359,6 +360,7 @@ export const CareerView = ({
   divisionFinished, pendingGlobal, worldPending, onBack, onPlayMatch, onSimulateWorld,
   onSimulateGlobalMatchday, onSimulateAllRemainingLeagues,
   onSetTactic, onSpendPE, onOpenReview, onSimulateMatch, clInfo, onOpenChampions,
+  uelInfo, onOpenUel, uelComp, onPlayUelMatch, onSimulateUelMatch, onSimulateAllUel,
   onRenameManager, reviewDone, contractSigned, allLeaguesFinished, championsFinished, onNewSeason,
   onApplyTrainingStats, onApplyDrillResult, onAcceptOffer, onRejectOffer, onSubmitApplication,
   onAdvanceOfficeWeek, onDecideLaterAppOffer, onRejectAppResolution, onDismissAppResolutionModal,
@@ -437,6 +439,23 @@ export const CareerView = ({
     : clComp?.phase === 'Final'
       ? 'FINAL'
       : clComp?.phase
+        ? 'EN VIVO'
+        : null;
+
+  // La Europa League del modo carrera sincronizada con C3
+  const isUelQualified = useMemo(() => {
+    if (uelInfo || career.uelQualified) return true;
+    if (uelComp?.teams?.length > 0) {
+      return uelComp.teams.some((t: any) => t.id === uelComp.careerTeamId || t.name === (uelComp.careerTeamName || team?.name) || t.id === uelComp.userTeamId);
+    }
+    return false;
+  }, [uelInfo, career.uelQualified, uelComp, team]);
+
+  const uelPhaseText = (uelComp?.phase === 'Terminado' || uelComp?.showWinner)
+    ? null
+    : uelComp?.phase === 'Final'
+      ? 'FINAL'
+      : uelComp?.phase
         ? 'EN VIVO'
         : null;
   const season = seasonState?.season || 1;
@@ -1159,6 +1178,15 @@ export const CareerView = ({
             badge={clPhaseText}
           />
         )}
+        {(isUelQualified || (uelComp?.teams && uelComp.teams.length > 0) || tab === 'uel') && (
+          <TabButton
+            active={tab === 'uel'}
+            onClick={() => setTab('uel')}
+            icon={<Flame size={15} className='text-amber-500' />}
+            label='Europa League'
+            badge={uelPhaseText}
+          />
+        )}
         <TabButton active={tab === 'table'} onClick={() => setTab('table')} icon={<BarChart3 size={15} />} label='Tabla' />
         <TabButton active={tab === 'calendar'} onClick={() => setTab('calendar')} icon={<Calendar size={15} />} label='Calendario' />
         <TabButton active={tab === 'jobs'} onClick={() => setTab('jobs')} icon={<Briefcase size={15} />} label='Empleo' badge={marketVacancies?.length} />
@@ -1401,6 +1429,31 @@ export const CareerView = ({
                         <Trophy size={16} className='text-blue-300' />
                         <span>Ver Hub de Champions League (Finalizada)</span>
                       </button>
+                    )}
+
+                    {/* Botones de UEFA Europa League */}
+                    {isUelQualified && (
+                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
+                        <button
+                          onClick={() => {
+                            if (onOpenUel) onOpenUel();
+                            setTab('uel');
+                          }}
+                          className='w-full bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-500 hover:to-orange-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all shadow-md flex items-center justify-center gap-2 border border-amber-400/40'
+                        >
+                          <Flame size={16} className='text-amber-300' />
+                          <span>Jugar Europa League</span>
+                        </button>
+                        {onSimulateAllUel && (
+                          <button
+                            onClick={onSimulateAllUel}
+                            className='w-full bg-slate-800 hover:bg-slate-700 text-amber-300 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all shadow-md flex items-center justify-center gap-2 border border-amber-500/30'
+                          >
+                            <Dices size={16} className='text-amber-400' />
+                            <span>Simular Europa League</span>
+                          </button>
+                        )}
+                      </div>
                     )}
 
                     {/* Botón para iniciar nueva temporada global cuando Champions League ha finalizado */}
@@ -2390,6 +2443,24 @@ export const CareerView = ({
               onPlayChampionsMatch={onPlayChampionsMatch || onOpenChampions}
               onSimulateChampionsMatch={onSimulateChampionsMatch}
               onSimulateAllChampions={onSimulateAllChampions}
+              onOpenNewSeason={onNewSeason}
+              onBackToCareer={() => setTab('main')}
+              onOpenDrill={() => setShowDrillModal(true)}
+              onOpenTraining={() => setShowTrainingModal(true)}
+              onSetTactic={onSetTactic}
+              ui={ui}
+            />
+          )}
+
+          {tab === 'uel' && (
+            <CareerUELHub
+              career={career}
+              team={team}
+              uelComp={uelComp}
+              uelInfo={uelInfo}
+              onPlayUelMatch={onPlayUelMatch || onOpenUel}
+              onSimulateUelMatch={onSimulateUelMatch}
+              onSimulateAllUel={onSimulateAllUel}
               onOpenNewSeason={onNewSeason}
               onBackToCareer={() => setTab('main')}
               onOpenDrill={() => setShowDrillModal(true)}
