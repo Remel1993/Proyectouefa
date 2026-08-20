@@ -1387,17 +1387,15 @@ export const careerSpells = (history = []) => {
 
 export const roll1D6 = (): number => Math.floor(Math.random() * 6) + 1;
 
-export const simOpportunity = (att: number = 1, def: number = 1, isHome: boolean = false): boolean => {
-  const attackBonus = isHome && roll1D6() === 6 ? 1 : 0;
-  const effectiveAtt = Math.min(5, Math.max(1, (att || 1) + attackBonus));
+export const simOpportunity = (att: number = 1, def: number = 1): boolean => {
   const attackRoll = roll1D6();
-  if (attackRoll > effectiveAtt) return false;
+  if (attackRoll > (att || 1)) return false;
   const defenseRoll = roll1D6();
-  return defenseRoll > Math.max(1, (def || 1));
+  return defenseRoll > (def || 1);
 };
 
 export const simPenalty = (att: number = 1, def: number = 1): boolean => {
-  return (roll1D6() <= Math.max(1, att || 1)) && (roll1D6() > Math.max(1, def || 1));
+  return (roll1D6() <= (att || 1)) && (roll1D6() > (def || 1));
 };
 
 export const simMatchGoals = (
@@ -1410,16 +1408,11 @@ export const simMatchGoals = (
 ): { sh: number; sa: number } => {
   let sh = 0;
   let sa = 0;
-  // Factor de localía natural: ~33% de probabilidad de generar 1 ocasión extra en casa
-  const homeBoost = roll1D6() <= 2 ? 1 : 0;
-  const effectiveOppH = Math.max(1, (oppH || 0) + homeBoost);
-  const effectiveOppA = Math.max(1, (oppA || 0));
-
-  for (let i = 0; i < effectiveOppH; i++) {
-    if (simOpportunity(attH, defA, true)) sh++;
+  for (let i = 0; i < (oppH || 0); i++) {
+    if (simOpportunity(attH, defA)) sh++;
   }
-  for (let i = 0; i < effectiveOppA; i++) {
-    if (simOpportunity(attA, defH, false)) sa++;
+  for (let i = 0; i < (oppA || 0); i++) {
+    if (simOpportunity(attA, defH)) sa++;
   }
   return { sh, sa };
 };
