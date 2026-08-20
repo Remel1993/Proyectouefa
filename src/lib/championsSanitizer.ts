@@ -115,3 +115,73 @@ export const sanitizeChampionsBracket = (
 
   return newBracket;
 };
+
+/**
+ * Extrae con precisión los 8 terceros lugares de la Fase de Grupos de UEFA Champions League.
+ */
+export const extractChampionsRepescados = (c1Comp: any): any[] => {
+  if (!c1Comp || !Array.isArray(c1Comp.groups) || !Array.isArray(c1Comp.teams)) {
+    return [];
+  }
+
+  const repescados: any[] = [];
+  const addedNames = new Set<string>();
+
+  c1Comp.groups.forEach((g: any, gi: number) => {
+    const groupTeams = c1Comp.teams
+      .filter((t: any) => g.teamIds && g.teamIds.includes(t.id))
+      .sort((a: any, b: any) => 
+        (b.pts || 0) - (a.pts || 0) ||
+        ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) ||
+        (b.gf || 0) - (a.gf || 0)
+      );
+
+    const third = groupTeams[2] || groupTeams[0];
+    if (third && !addedNames.has(third.name)) {
+      addedNames.add(third.name);
+      const groupLetter = g.name || `Grupo ${String.fromCharCode(65 + gi)}`;
+      repescados.push({
+        ...third,
+        id: 17 + gi,
+        isRepesca: true,
+        clOrigin: `Champions League (3.º ${groupLetter})`
+      });
+    }
+  });
+
+  return repescados;
+};
+
+/**
+ * Inyecta los 8 repescados reales de Champions League en la estructura de UEFA Europa League (C3).
+ */
+export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => {
+  if (!uelComp || !uelComp.teams) return uelComp;
+  
+  const realRepescados = extractChampionsRepescados(c1Comp);
+  if (realRepescados.length < 8) {
+    return uelComp;
+  }
+
+  // Conservar los 16 equipos de liga originales (IDs 1..16)
+  const leagueTeams = (uelComp.teams || []).filter((t: any) => !t.isRepesca && t.id <= 16);
+  
+  // Asegurar que tenemos exactamente 16 de liga y 8 repescados (total 24)
+  const updatedTeams = [...leagueTeams.slice(0, 16), ...realRepescados.slice(0, 8)];
+
+  // Actualizar el bracket de Octavos para que 'aId' apunte fielmente a los IDs 17..24
+  const updatedBracket = { ...(uelComp.bracket || {}) };
+  if (Array.isArray(updatedBracket.Octavos)) {
+    updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
+      ...m,
+      aId: 17 + i
+    }));
+  }
+
+  return {
+    ...uelComp,
+    teams: updatedTeams,
+    bracket: updatedBracket
+  };
+};
+

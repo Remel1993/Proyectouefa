@@ -1,6 +1,6 @@
 export type Slot = "FINDE" | "MITAD" | "UNICO";
 
-export type Competicion = "LIGA" | "CHAMPIONS" | "EUROPA_LEAGUE" | "SELECCIONES";
+export type Competicion = "LIGA" | "CHAMPIONS" | "EUROPA_LEAGUE";
 
 export interface Fixture {
   id: string;
@@ -98,13 +98,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Tercera fecha de liga regular."
       },
       {
-        id: "w5-intl-break",
-        competicion: "SELECCIONES",
-        ronda: "Parón de Selecciones",
+        id: "w5-rest-break",
+        competicion: "LIGA",
+        ronda: "Puesta a Punto y Descanso",
         slot: "MITAD",
         esPartido: false,
-        title: "Ventana FIFA de Selecciones",
-        desc: "Compromisos y clasificatorios internacionales de selecciones nacionales."
+        title: "Puesta a Punto del Plantel",
+        desc: "Ajustes tácticos, recuperación física y gestión interna del club."
       }
     ]
   },
@@ -149,14 +149,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Arranque de la fase de grupos de UEFA Champions League."
       },
       {
-        id: "w7-el-j1",
+        id: "w7-el-info",
         competicion: "EUROPA_LEAGUE",
-        ronda: "Fase de Grupos — J1",
+        ronda: "Seguimiento de Liga",
         slot: "MITAD",
-        esPartido: true,
-        europeanRound: "GRUPOS_1",
-        title: "Europa League · Grupos J1",
-        desc: "Primera jornada de UEFA Europa League."
+        esPartido: false,
+        title: "Europa League · Seguimiento Clasificación",
+        desc: "Los puestos 5º al 8º de cada liga regular obtendrán billete a Dieciseisavos de UEL."
       }
     ]
   },
@@ -201,14 +200,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Segunda jornada de la fase de grupos de UCL."
       },
       {
-        id: "w9-el-j2",
+        id: "w9-el-info",
         competicion: "EUROPA_LEAGUE",
-        ronda: "Fase de Grupos — J2",
+        ronda: "Seguimiento de Liga",
         slot: "MITAD",
-        esPartido: true,
-        europeanRound: "GRUPOS_2",
-        title: "Europa League · Grupos J2",
-        desc: "Segunda fecha de la fase de grupos de UEL."
+        esPartido: false,
+        title: "Europa League · Seguimiento Clasificación",
+        desc: "Seguimiento de las plazas de acceso 5º al 8º para la 1ª eliminatoria."
       }
     ]
   },
@@ -253,14 +251,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Tercera jornada de la fase de grupos de UCL."
       },
       {
-        id: "w11-el-j3",
+        id: "w11-el-info",
         competicion: "EUROPA_LEAGUE",
-        ronda: "Fase de Grupos — J3",
+        ronda: "Seguimiento de Liga",
         slot: "MITAD",
-        esPartido: true,
-        europeanRound: "GRUPOS_3",
-        title: "Europa League · Grupos J3",
-        desc: "Tercera fecha de grupos en UEL."
+        esPartido: false,
+        title: "Europa League · Seguimiento Clasificación",
+        desc: "Seguimiento de la carrera por los billetes a Dieciseisavos de UEL."
       }
     ]
   },
@@ -295,13 +292,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Undécima fecha de liga."
       },
       {
-        id: "w13-intl-break",
-        competicion: "SELECCIONES",
-        ronda: "Parón de Selecciones",
+        id: "w13-rest-break",
+        competicion: "LIGA",
+        ronda: "Puesta a Punto de Otoño",
         slot: "MITAD",
         esPartido: false,
-        title: "Ventana FIFA de Otoño",
-        desc: "Partidos internacionales de selecciones."
+        title: "Descanso Táctico y Recuperación",
+        desc: "Sesión intensiva de recuperación física y análisis táctico."
       }
     ]
   },
@@ -330,14 +327,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Cuarta fecha de fase de grupos UCL."
       },
       {
-        id: "w14-el-j4",
+        id: "w14-el-info",
         competicion: "EUROPA_LEAGUE",
-        ronda: "Fase de Grupos — J4",
+        ronda: "Seguimiento de Liga",
         slot: "MITAD",
-        esPartido: true,
-        europeanRound: "GRUPOS_4",
-        title: "Europa League · Grupos J4",
-        desc: "Cuarta fecha de fase de grupos UEL."
+        esPartido: false,
+        title: "Europa League · Seguimiento Clasificación",
+        desc: "Evolución de la tabla para las 16 plazas de liga europea."
       }
     ]
   },
@@ -382,14 +378,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Quinta fecha de fase de grupos UCL."
       },
       {
-        id: "w16-el-j5",
+        id: "w16-el-info",
         competicion: "EUROPA_LEAGUE",
-        ronda: "Fase de Grupos — J5",
+        ronda: "Seguimiento de Liga",
         slot: "MITAD",
-        esPartido: true,
-        europeanRound: "GRUPOS_5",
-        title: "Europa League · Grupos J5",
-        desc: "Quinta fecha de fase de grupos UEL."
+        esPartido: false,
+        title: "Europa League · Seguimiento Clasificación",
+        desc: "Penúltima fecha previa a la resolución de grupos de Champions."
       }
     ]
   },
@@ -434,14 +429,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Última fecha de grupos: clasificados a octavos UCL y repescados a UEL."
       },
       {
-        id: "w18-el-j6",
+        id: "w18-el-repesca-info",
         competicion: "EUROPA_LEAGUE",
-        ronda: "Fase de Grupos — J6 (Cierre)",
+        ronda: "Definición de Repescados UCL",
         slot: "MITAD",
-        esPartido: true,
-        europeanRound: "GRUPOS_6",
-        title: "Europa League · Grupos J6 (Cierre)",
-        desc: "Última jornada de la fase de grupos de UEL."
+        esPartido: false,
+        title: "Europa League · Repescados de Champions",
+        desc: "Los 8 terceros de Champions League aseguran plaza directa en Octavos de UEL."
       }
     ]
   },
@@ -750,13 +744,13 @@ export const SEASON_CALENDAR_42_WEEKS: SemanaCalendario[] = [
         desc: "Vigésimo novena fecha de liga."
       },
       {
-        id: "w31-intl-break",
-        competicion: "SELECCIONES",
-        ronda: "Parón de Selecciones",
+        id: "w31-rest-break",
+        competicion: "LIGA",
+        ronda: "Puesta a Punto de Primavera",
         slot: "MITAD",
         esPartido: false,
-        title: "Ventana FIFA de Primavera",
-        desc: "Compromisos internacionales y clasificatorios oficiales."
+        title: "Descanso y Preparación de Recta Final",
+        desc: "Planificación de cara a la recta final y definición de títulos."
       }
     ]
   },
@@ -1034,4 +1028,58 @@ export const getWeekForLeagueMatchday = (matchday: number): number => {
     w.fixtures.some(f => f.competicion === "LIGA" && f.esPartido && f.leagueMatchday === matchday)
   );
   return week ? week.weekIndex : matchday;
+};
+
+// Semanas oficiales con fechas de UEFA Champions League (Sorteos y Rondas)
+export const CHAMPIONS_DRAW_WEEKS = [2, 20];
+export const CHAMPIONS_MATCH_WEEKS = [7, 9, 11, 14, 16, 18, 25, 27, 30, 32, 34, 36, 41];
+export const CHAMPIONS_CALENDAR_WEEKS = [2, 7, 9, 11, 14, 16, 18, 20, 25, 27, 30, 32, 34, 36, 41];
+
+// Semanas oficiales con fechas de UEFA Europa League (Sorteo, Dieciseisavos, Octavos, Cuartos, Semis, Final)
+export const EUROPA_LEAGUE_DRAW_WEEKS = [20];
+export const EUROPA_LEAGUE_MATCH_WEEKS = [22, 23, 25, 27, 30, 32, 34, 36, 39];
+export const EUROPA_LEAGUE_CALENDAR_WEEKS = [20, 22, 23, 25, 27, 30, 32, 34, 36, 39];
+
+export const isChampionsWeek = (weekIndex: number): boolean => {
+  return CHAMPIONS_CALENDAR_WEEKS.includes(weekIndex);
+};
+
+export const isChampionsDrawWeek = (weekIndex: number): boolean => {
+  return CHAMPIONS_DRAW_WEEKS.includes(weekIndex);
+};
+
+export const isChampionsMatchWeek = (weekIndex: number): boolean => {
+  return CHAMPIONS_MATCH_WEEKS.includes(weekIndex);
+};
+
+export const isEuropaLeagueWeek = (weekIndex: number): boolean => {
+  return EUROPA_LEAGUE_CALENDAR_WEEKS.includes(weekIndex);
+};
+
+export const isEuropaLeagueDrawWeek = (weekIndex: number): boolean => {
+  return EUROPA_LEAGUE_DRAW_WEEKS.includes(weekIndex);
+};
+
+export const isEuropaLeagueMatchWeek = (weekIndex: number): boolean => {
+  return EUROPA_LEAGUE_MATCH_WEEKS.includes(weekIndex);
+};
+
+export const getNextChampionsWeek = (currentWeek: number): number | null => {
+  const next = CHAMPIONS_CALENDAR_WEEKS.find(w => w > currentWeek);
+  return next || (currentWeek >= 41 ? null : 41);
+};
+
+export const getNextChampionsMatchWeek = (currentWeek: number): number | null => {
+  const next = CHAMPIONS_MATCH_WEEKS.find(w => w >= currentWeek);
+  return next || (currentWeek >= 41 ? null : 41);
+};
+
+export const getNextEuropaLeagueWeek = (currentWeek: number): number | null => {
+  const next = EUROPA_LEAGUE_CALENDAR_WEEKS.find(w => w > currentWeek);
+  return next || (currentWeek >= 39 ? null : 39);
+};
+
+export const getNextEuropaLeagueMatchWeek = (currentWeek: number): number | null => {
+  const next = EUROPA_LEAGUE_MATCH_WEEKS.find(w => w >= currentWeek);
+  return next || (currentWeek >= 39 ? null : 39);
 };
