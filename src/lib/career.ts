@@ -11,8 +11,9 @@ export const CAREER_DIV = 2; // Segunda División
 // Duración máxima de un contrato: al terminar hay que renovar o cambiar de aires
 export const CONTRACT_SEASONS = 3;
 
-// Plazas de clasificación a Champions en 1ª División
+// Plazas de clasificación a Champions en 1ª División (4 para ligas estándar, 8 para Miscelánea)
 export const CL_SPOTS = 4;
+export const getClSpots = (compId?: string) => compId === 'L7' ? 8 : 4;
 
 // Clases de liga (GDD §4)
 export const LEAGUE_CLASS = {
@@ -590,19 +591,20 @@ export const seasonObjectives = ({
       rewardRep: clTarget.rep
     });
   } else if (div === 1 && tier >= 3) {
-    const isClSpot = played > 0 && !!position && position <= CL_SPOTS;
+    const spots = getClSpots(career?.compId);
+    const isClSpot = played > 0 && !!position && position <= spots;
     const isFailed = played >= rounds && !isClSpot;
     items.push({
       key: 'championsSpot',
       category: 'Continental',
       priority: 'Muy Alta',
       extra: true,
-      label: `Clasificar a UEFA Champions League (Top ${CL_SPOTS})`,
-      detail: played && position ? `Marchas ${position}º (Plazas Champions: 1º al ${CL_SPOTS}º)` : `Exigencia: Top ${CL_SPOTS} de la liga`,
+      label: `Clasificar a UEFA Champions League (Top ${spots})`,
+      detail: played && position ? `Marchas ${position}º (Plazas Champions: 1º al ${spots}º)` : `Exigencia: Top ${spots} de la liga`,
       done: isClSpot,
-      progress: !played || !position ? 40 : Math.max(0, Math.min(100, Math.round(((size - position + 1) / (size - CL_SPOTS + 1)) * 100))),
+      progress: !played || !position ? 40 : Math.max(0, Math.min(100, Math.round(((size - position + 1) / (size - spots + 1)) * 100))),
       currentValue: played && position ? `${position}º` : '—',
-      targetValue: `Top ${CL_SPOTS}`,
+      targetValue: `Top ${spots}`,
       status: isClSpot ? 'on_track' : isFailed ? 'failed' : 'at_risk',
       statusLabel: isClSpot ? 'En Champions' : isFailed ? 'No Clasificado' : 'Fuera de Zona'
     });
@@ -682,10 +684,11 @@ export const calculateBoardConfidence = ({
  * participantes, su fase de grupos y sus eliminatorias. Aquí sólo viven las
  * utilidades de lectura de ese torneo.
  */
-export const CL_PHASE_ORDER = ['groups', 'Octavos', 'Cuartos', 'Semis', 'Final', 'Terminado'];
+export const CL_PHASE_ORDER = ['groups', 'Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final', 'Terminado'];
 
 export const clPhaseLabel = (phase?: string | null) => ({
   groups: 'Fase de grupos',
+  Dieciseisavos: 'Dieciseisavos (Playoff)',
   Octavos: 'Octavos de final',
   Cuartos: 'Cuartos de final',
   Semis: 'Semifinales',

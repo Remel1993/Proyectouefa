@@ -17,6 +17,7 @@ export interface ChampionsBracketMatch {
 }
 
 export interface ChampionsBracket {
+  Dieciseisavos?: ChampionsBracketMatch[];
   Octavos?: ChampionsBracketMatch[];
   Cuartos?: ChampionsBracketMatch[];
   Semis?: ChampionsBracketMatch[];
@@ -24,7 +25,7 @@ export interface ChampionsBracket {
 }
 
 /**
- * Sanitiza y auto-repara el bracket de Champions League para asegurar que no existan
+ * Sanitiza y auto-repara el bracket de Champions League y Europa League para asegurar que no existan
  * estados corruptos o incompletos (por ejemplo, llaves donde se disputó la ida y se avanzó de ronda
  * pero faltaron los datos de la vuelta).
  */
@@ -35,6 +36,7 @@ export const sanitizeChampionsBracket = (
   if (!bracket || typeof bracket !== 'object') return null;
 
   const newBracket: any = {
+    Dieciseisavos: Array.isArray(bracket.Dieciseisavos) ? bracket.Dieciseisavos.map((m: any) => ({ ...m })) : undefined,
     Octavos: Array.isArray(bracket.Octavos) ? bracket.Octavos.map((m: any) => ({ ...m })) : [],
     Cuartos: Array.isArray(bracket.Cuartos) ? bracket.Cuartos.map((m: any) => ({ ...m })) : [],
     Semis: Array.isArray(bracket.Semis) ? bracket.Semis.map((m: any) => ({ ...m })) : [],
@@ -45,11 +47,11 @@ export const sanitizeChampionsBracket = (
       : [{ id: 'F1', hId: null, aId: null, sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null }]
   };
 
-  const phases = ['Octavos', 'Cuartos', 'Semis'];
+  const phases = ['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis'];
 
   phases.forEach((p, pIdx) => {
     if (!Array.isArray(newBracket[p]) || newBracket[p].length === 0) return;
-    const nextPhase = pIdx === 0 ? 'Cuartos' : pIdx === 1 ? 'Semis' : 'Final';
+    const nextPhase = p === 'Dieciseisavos' ? 'Octavos' : p === 'Octavos' ? 'Cuartos' : p === 'Cuartos' ? 'Semis' : 'Final';
     const nextRound = Array.isArray(newBracket[nextPhase]) ? newBracket[nextPhase] : [newBracket[nextPhase]].filter(Boolean);
     const hasAdvancedTeams = nextRound.some((nm: any) => nm && (nm.hId || nm.aId));
 
