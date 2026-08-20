@@ -11,7 +11,7 @@ import {
   Dice4, Dice5, Dice6, Globe, Shield as ShieldIcon, Info, ArrowRight, Dices,
   Wand2, Shuffle, ArrowUpCircle, ArrowDownCircle, AlertTriangle,
   Newspaper, TrendingUp, AlertCircle, Flame, Star, X, Megaphone, Eye, Briefcase,
-  Plus, Trash2, Flag, Sparkles
+  Plus, Trash2, Flag, Sparkles, FastForward
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { registerTitle, registerTitles } from '@/lib/palmares';
@@ -31,13 +31,15 @@ import {
 import { sanitizeChampionsBracket } from '@/lib/championsSanitizer';
 import { PRESETS, PRESETS_2, DERBY_PAIRS, findDerby } from '@/lib/presets';
 import { CompetitionLogo } from '@/components/CompetitionLogo';
+import { SeasonCalendarModal } from '@/components/SeasonCalendarModal';
+import { SEASON_CALENDAR_42_WEEKS, getSemanaCalendario, getTotalCalendarWeeks } from '@/lib/seasonCalendar';
 import championsStadiumBg from './assets/images/champions_league_stadium_1786921289637.jpg';
 import worldCupStadiumDayBg from './assets/images/world_cup_stadium_day_1786921535635.jpg';
 
 // ==========================================
 // 1. CONSTANTES DEL SISTEMA
 // ==========================================
-const APP_ID = 'dice-football-hub-elite-v6'; // Actualizado v6
+const APP_ID = 'dice-football-hub-elite-v8'; // Actualizado v8 para asegurar formato eliminatorio puro de UEL
 
 // ==========================================
 // 2. HELPERS Y GENERADORES
@@ -282,6 +284,7 @@ const getDefaultComps = () => {
     'L5': getLeagueData('Liga Holandesa', 'NL'),
     'L6': getLeagueData('Liga Francesa', 'FR'),
     'L7': getLeagueData('Miscelánea', 'MI'),
+    'L8': getLeagueData('Miscelánea B', 'MB'),
     'C1': { id: 'C1', type: 'cup', name: 'Champions League', teams: [], matchday: 0, history: [], userTeamId: 1, showWinner: false, phase: 'groups', bracket: null, disqualified: false },
     'C2': { id: 'C2', type: 'cup', name: 'Copa del Mundo', teams: [], matchday: 0, history: [], userTeamId: 1, showWinner: false, phase: 'groups', bracket: null, disqualified: false },
     'C3': { id: 'C3', type: 'cup', name: 'UEFA Europa League', ...buildUELKnockout({}), disqualified: false }
@@ -312,9 +315,9 @@ const isLeagueFinished = (comp) => {
 // ==========================================
 // Cada liga conserva su propio calendario (18 equipos = 34 jornadas, 20 = 38),
 // pero todas comparten el mismo "reloj" de temporada: la jornada global.
-const LEAGUE_IDS = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7'];
+const LEAGUE_IDS = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7', 'L8'];
 const SEASON_KEY = `${APP_ID}_season`;
-const DEFAULT_SEASON_STATE = { season: 1, globalMatchday: 1, phase: 'leagues' as 'leagues' | 'champions' };
+const DEFAULT_SEASON_STATE = { season: 1, currentWeek: 1, globalMatchday: 1, phase: 'leagues' as 'leagues' | 'champions' };
 
 // Jornadas totales de una división según su número de equipos (ida y vuelta)
 const divTotalRounds = (teams) =>
@@ -361,12 +364,12 @@ const getPresetStatsForTeam = (teamName: string) => {
   for (const list of Object.values(PRESETS)) {
     if (!Array.isArray(list)) continue;
     const found = list.find((t: any) => t.name === teamName);
-    if (found) return { att: found.att, opp: found.opp, def: found.def };
+    if (found) return { att: found.att, opp: found.opp, def: found.def, color1: found.color1, color2: found.color2, league: found.league, isFlag: found.isFlag, region: found.region, tier: found.tier };
   }
   for (const list of Object.values(PRESETS_2)) {
     if (!Array.isArray(list)) continue;
     const found = list.find((t: any) => t.name === teamName);
-    if (found) return { att: found.att, opp: found.opp, def: found.def };
+    if (found) return { att: found.att, opp: found.opp, def: found.def, color1: found.color1, color2: found.color2, league: found.league, isFlag: found.isFlag, region: found.region, tier: found.tier };
   }
   return null;
 };
@@ -442,7 +445,7 @@ const computeLeagueNewSeason = (comp: any) => {
 // - Miscelánea (L7): Top 8 (1º al 8º)
 // Total = 4 + 4 + 4 + 4 + 4 + 4 + 8 = exactamente 32 plazas directas
 const buildCLPool = (compsState: any, forceNames: string[] = []) => {
-  const leagueCodeMap: Record<string, string> = { L1: 'ES', L2: 'IT', L3: 'EN', L4: 'DE', L5: 'NL', L6: 'FR', L7: 'MI' };
+  const leagueCodeMap: Record<string, string> = { L1: 'ES', L2: 'IT', L3: 'EN', L4: 'DE', L5: 'NL', L6: 'FR', L7: 'MI', L8: 'MB' };
 
   const getSource = (compKey: string) => {
     const comp = compsState?.[compKey];
@@ -483,7 +486,7 @@ const buildCLPool = (compsState: any, forceNames: string[] = []) => {
     return ordered.slice(0, count);
   };
 
-  // 32 cupos directos estrictos: 6 ligas x 4 puestos + Miscelánea x 8 puestos
+  // 32 cupos directos estrictos: 8 ligas x 4 puestos
   let pool = [
     ...pull('L1', 4), // 🇪🇸 España: 1º al 4º
     ...pull('L3', 4), // 🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra: 1º al 4º
@@ -491,7 +494,8 @@ const buildCLPool = (compsState: any, forceNames: string[] = []) => {
     ...pull('L4', 4), // 🇩🇪 Alemania: 1º al 4º
     ...pull('L6', 4), // 🇫🇷 Francia: 1º al 4º
     ...pull('L5', 4), // 🇳🇱 Países Bajos: 1º al 4º
-    ...pull('L7', 8), // 🌍 Miscelánea: 1º al 8º
+    ...pull('L7', 4), // 🇵🇹 Miscelánea: 1º al 4º
+    ...pull('L8', 4), // 🌍 Miscelánea B: 1º al 4º
   ];
 
   // Sin duplicados por nombre
@@ -501,7 +505,7 @@ const buildCLPool = (compsState: any, forceNames: string[] = []) => {
   // Respaldo de seguridad solo si alguna liga no tuviera equipos configurados
   if (pool.length < 32) {
     const eligible: any[] = [];
-    ['L1','L3','L4','L2','L6','L5','L7'].forEach(k => {
+    ['L1','L3','L4','L2','L6','L5','L7','L8'].forEach(k => {
       const comp = compsState?.[k];
       if (comp && Array.isArray(comp.teams)) {
         comp.teams.forEach((t: any) => {
@@ -529,7 +533,7 @@ const buildCLPool = (compsState: any, forceNames: string[] = []) => {
   (forceNames || []).forEach((name: string) => {
     if (!name || pool.some(t => t.name === name)) return;
     let forced: any = null;
-    ['L1','L2','L3','L4','L5','L6','L7'].forEach(k => {
+    ['L1','L2','L3','L4','L5','L6','L7','L8'].forEach(k => {
       const comp = compsState?.[k];
       if (!forced && comp && Array.isArray(comp.teams)) {
         const found = comp.teams.find((t: any) => t.name === name);
@@ -553,7 +557,7 @@ const buildCLPool = (compsState: any, forceNames: string[] = []) => {
 };
 
 const drawKnockoutGroups = (pool: any[], isWC?: boolean, randomize: boolean = true) => {
-  const leagueCodeMap: Record<string, string> = { L1: 'ES', L2: 'IT', L3: 'EN', L4: 'DE', L5: 'NL', L6: 'FR', L7: 'MI' };
+  const leagueCodeMap: Record<string, string> = { L1: 'ES', L2: 'IT', L3: 'EN', L4: 'DE', L5: 'NL', L6: 'FR', L7: 'MI', L8: 'MB' };
 
   // Normalizar y resetear estadísticas para la nueva fase de grupos
   const normalizedPool = pool.map((t) => ({
@@ -1984,7 +1988,8 @@ const ArchiveView = ({ setView, archive, selectedArchiveEntry, setSelectedArchiv
     { id: 'L4', name: 'Alemania', fullName: 'Liga Alemana', flag: '🇩🇪' },
     { id: 'L5', name: 'Países Bajos', fullName: 'Liga Holandesa', flag: '🇳🇱' },
     { id: 'L6', name: 'Francia', fullName: 'Liga Francesa', flag: '🇫🇷' },
-    { id: 'L7', name: 'Miscelánea / Portugal', fullName: 'Liga Miscelánea', flag: '🇵🇹' }
+    { id: 'L7', name: 'Miscelánea', fullName: 'Liga Miscelánea', flag: '🇵🇹' },
+    { id: 'L8', name: 'Miscelánea B', fullName: 'Liga Miscelánea B', flag: '🌍' }
   ];
 
   return (
@@ -2183,9 +2188,31 @@ const RulesView = ({ setView }) => (
   </div>
 );
 
-const HubView = ({ setView, setActiveCompId, setCompView, comps, seasonState, pendingLeagueIds, allLeaguesFinished, championsFinished, onSimulateLeague, onSimulateAll, onNewSeason, onSimulateChampions, career, onOpenCareer }) => {
+const HubView = ({ 
+  setView, 
+  setActiveCompId, 
+  setCompView, 
+  comps, 
+  seasonState, 
+  pendingLeagueIds, 
+  allLeaguesFinished, 
+  championsFinished, 
+  onSimulateLeague, 
+  onSimulateAll, 
+  onSimulateWeek,
+  onSimulateUntilNextMatch,
+  onNewSeason, 
+  onSimulateChampions, 
+  career, 
+  onOpenCareer,
+  onOpenSeasonCalendar,
+  milestoneToast,
+  onDismissMilestoneToast
+}) => {
   const [showLeagues, setShowLeagues] = useState(false);
   const globalMatchday = seasonState?.globalMatchday || 1;
+  const currentWeek = seasonState?.currentWeek || 1;
+  const weekData = useMemo(() => getSemanaCalendario(currentWeek) || SEASON_CALENDAR_42_WEEKS[0], [currentWeek]);
   const pending = pendingLeagueIds || [];
   const leagues = [
     { id: 'L1', name: 'LaLiga', flag: '🇪🇸', country: 'España' },
@@ -2194,8 +2221,12 @@ const HubView = ({ setView, setActiveCompId, setCompView, comps, seasonState, pe
     { id: 'L4', name: 'Bundesliga', flag: '🇩🇪', country: 'Alemania' },
     { id: 'L5', name: 'Eredivisie', flag: '🇳🇱', country: 'Países Bajos' },
     { id: 'L6', name: 'Ligue 1', flag: '🇫🇷', country: 'Francia' },
-    { id: 'L7', name: 'Miscelánea', flag: '🇵🇹', country: 'Portugal / Otros' }
+    { id: 'L7', name: 'Miscelánea', flag: '🇵🇹', country: 'Portugal / Otros' },
+    { id: 'L8', name: 'Miscelánea B', flag: '🌍', country: 'Resto de Europa' }
   ];
+
+  const playableFixtures = weekData?.fixtures?.filter(f => f.esPartido) || [];
+  const milestones = weekData?.fixtures?.filter(f => !f.esPartido) || [];
 
   return (
     <div className='flex-grow flex flex-col px-3.5 sm:px-4 pb-12 space-y-4'>
@@ -2213,29 +2244,121 @@ const HubView = ({ setView, setActiveCompId, setCompView, comps, seasonState, pe
         </p>
       </header>
 
-      {/* PANEL DE CONTROL DE TEMPORADA / MATCHDAY */}
+      {/* MILESTONE TOAST / NOTIFICACIÓN DE HITO SEMANAL */}
+      {milestoneToast && (
+        <div className='bg-gradient-to-r from-amber-950/80 via-slate-900/90 to-amber-950/80 backdrop-blur-md rounded-2xl p-3 border border-amber-500/40 shadow-lg flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300'>
+          <div className='flex items-center gap-2.5 min-w-0'>
+            <div className='w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30'>
+              <Sparkles size={16} />
+            </div>
+            <div className='min-w-0'>
+              <span className='text-[8px] font-black uppercase tracking-wider text-amber-400 block'>
+                Hito Semana {milestoneToast.week}
+              </span>
+              <p className='text-[10.5px] font-black uppercase italic text-white truncate'>
+                {milestoneToast.title}
+              </p>
+              {milestoneToast.desc && (
+                <p className='text-[8.5px] font-medium text-slate-300 line-clamp-1'>
+                  {milestoneToast.desc}
+                </p>
+              )}
+            </div>
+          </div>
+          {onDismissMilestoneToast && (
+            <button 
+              onClick={onDismissMilestoneToast}
+              className='p-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0'
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* PANEL DE CONTROL DE TEMPORADA / CALENDARIO */}
       <section className='bg-slate-900/60 backdrop-blur-xl rounded-3xl p-4 sm:p-5 border border-white/10 shadow-2xl space-y-3.5'>
         <div className='flex items-center justify-between gap-3'>
           <div className='min-w-0'>
-            <div className='flex items-center gap-2'>
+            <div className='flex items-center gap-2 flex-wrap'>
               <span className='px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[8.5px] font-black uppercase tracking-wider'>
                 Temporada {seasonState?.season || 1}
               </span>
+              <span className='px-2 py-0.5 rounded-md bg-blue-500/20 border border-blue-400/30 text-blue-300 text-[8.5px] font-black uppercase tracking-wider'>
+                Semana {currentWeek} / 42
+              </span>
               <span className='text-[8.5px] font-bold text-slate-400 uppercase tracking-wider'>
-                Jornada {globalMatchday}
+                {weekData?.mes || 'Agosto'}
               </span>
             </div>
             <h2 className='text-lg font-black uppercase italic text-white tracking-tight mt-1 truncate'>
               {allLeaguesFinished
-                ? (championsFinished ? 'Temporada Completada' : 'Fase Champions League')
-                : pending.length === 0
-                  ? 'Jornada al día en todas las ligas'
-                  : `${pending.length} liga${pending.length > 1 ? 's' : ''} pendiente${pending.length > 1 ? 's' : ''}`}
+                ? (championsFinished ? 'Temporada Completada' : 'Fase Final Champions League')
+                : playableFixtures.length === 0
+                  ? `${weekData?.fixtures?.[0]?.ronda || 'Sin partidos oficiales'}`
+                  : `Semana ${currentWeek} · ${playableFixtures.map(f => f.ronda).join(' + ')}`}
             </h2>
           </div>
 
-          <div className='w-11 h-11 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-emerald-400 shrink-0 shadow-inner'>
-            <Calendar size={20} />
+          <button
+            onClick={onOpenSeasonCalendar}
+            title="Abrir Calendario Oficial de 42 Semanas"
+            className='w-11 h-11 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/10 hover:border-emerald-400/50 flex items-center justify-center text-emerald-400 hover:text-emerald-300 shrink-0 shadow-inner active:scale-95 transition-all group'
+          >
+            <Calendar size={20} className='group-hover:scale-110 transition-transform' />
+          </button>
+        </div>
+
+        {/* Fixtures de la semana actual */}
+        <div className='bg-black/30 rounded-2xl p-2.5 border border-white/5 space-y-1.5'>
+          <div className='flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-slate-400 px-1'>
+            <span>Eventos y Partidos de la Semana {currentWeek}</span>
+            <button 
+              onClick={onOpenSeasonCalendar} 
+              className='text-amber-400 hover:underline flex items-center gap-0.5'
+            >
+              <span>Ver 42 semanas</span>
+              <ArrowRight size={10} />
+            </button>
+          </div>
+          <div className='grid gap-1'>
+            {weekData?.fixtures?.map((fix, idx) => (
+              <div 
+                key={fix.id || idx}
+                className={`flex items-center justify-between p-2 rounded-xl text-[9px] border ${
+                  fix.competicion === 'CHAMPIONS'
+                    ? 'bg-blue-950/40 border-blue-500/20 text-blue-200'
+                    : fix.competicion === 'EUROPA_LEAGUE'
+                    ? 'bg-amber-950/40 border-amber-500/20 text-amber-200'
+                    : fix.competicion === 'SELECCIONES'
+                    ? 'bg-cyan-950/40 border-cyan-500/20 text-cyan-200'
+                    : 'bg-emerald-950/40 border-emerald-500/20 text-emerald-200'
+                }`}
+              >
+                <div className='flex items-center gap-2 min-w-0'>
+                  <span className='font-black uppercase tracking-wider text-[8px] px-1.5 py-0.5 rounded bg-black/40'>
+                    {fix.competicion}
+                  </span>
+                  <span className='font-bold truncate'>
+                    {fix.ronda}
+                  </span>
+                </div>
+                <div className='flex items-center gap-1 shrink-0'>
+                  <span className='text-[7.5px] font-black uppercase tracking-wider opacity-70'>
+                    {fix.slot}
+                  </span>
+                  {fix.esPartido ? (
+                    <span className='text-[7px] font-black uppercase px-1 py-0.5 rounded bg-emerald-500/30 text-emerald-300'>
+                      Partido
+                    </span>
+                  ) : (
+                    <span className='text-[7px] font-black uppercase px-1 py-0.5 rounded bg-amber-500/30 text-amber-300'>
+                      Hito
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -2261,15 +2384,30 @@ const HubView = ({ setView, setActiveCompId, setCompView, comps, seasonState, pe
           })}
         </div>
 
-        {/* BOTÓN PRINCIPAL DE ACCIÓN */}
-        {pending.length > 0 && (
-          <button
-            onClick={onSimulateAll}
-            className='w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-md'
-          >
-            <Dices size={17} className='text-slate-950 stroke-[2.5]' />
-            <span>Simular Jornada {globalMatchday} ({pending.length} ligas)</span>
-          </button>
+        {/* BOTÓN PRINCIPAL DE ACCIÓN: SIMULAR SEMANA */}
+        {currentWeek <= 42 && !allLeaguesFinished && (
+          <div className='space-y-2 pt-1'>
+            <button
+              onClick={onSimulateWeek || onSimulateAll}
+              className='w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-md'
+            >
+              <Dices size={17} className='text-slate-950 stroke-[2.5]' />
+              <span>
+                Simular Semana {currentWeek} {playableFixtures.length > 0 ? `(${playableFixtures.length} fixture${playableFixtures.length > 1 ? 's' : ''})` : '(Resolver Hito)'}
+              </span>
+            </button>
+
+            {/* BOTÓN SECUNDARIO: SIMULAR HASTA MI PRÓXIMO PARTIDO */}
+            {onSimulateUntilNextMatch && (
+              <button
+                onClick={onSimulateUntilNextMatch}
+                className='w-full py-2.5 px-3 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white rounded-xl text-[9.5px] font-bold uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 border border-white/10'
+              >
+                <FastForward size={13} className='text-amber-400' />
+                <span>Simular hasta mi próximo partido</span>
+              </button>
+            )}
+          </div>
         )}
 
         {allLeaguesFinished && !championsFinished && (
@@ -2566,7 +2704,8 @@ const ConfigPanel = ({ initialComp, compId, onSave, onCancel, onTotalReset }) =>
 
   // Estados para competiciones de copa (Champions, Europa League y Copa del Mundo)
   const isWC = compId === 'C2' || draft.id === 'C2' || !!draft.isWorldCup || (draft.name || '').includes('Mundial') || (draft.name || '').includes('Copa del Mundo');
-  const isCL = compId === 'C1' || compId === 'C3' || draft.id === 'C1' || draft.id === 'C3' || (draft.name || '').includes('Champions') || (draft.name || '').includes('Europa');
+  const isCL = (compId === 'C1' || draft.id === 'C1' || (draft.name || '').includes('Champions')) && compId !== 'C3' && draft.id !== 'C3' && !(draft.name || '').includes('Europa');
+  const isUEL = compId === 'C3' || draft.id === 'C3' || (draft.name || '').includes('Europa');
   const [newCountryName, setNewCountryName] = useState('');
   const [newCountryAtt, setNewCountryAtt] = useState(3);
   const [newCountryOpp, setNewCountryOpp] = useState(3);
@@ -2596,6 +2735,24 @@ const ConfigPanel = ({ initialComp, compId, onSave, onCancel, onTotalReset }) =>
           type: 'deficit',
           count,
           diff: 32 - count
+        });
+        return;
+      }
+    } else if (isUEL) {
+      const count = (draft.teams || []).length;
+      if (count > 24) {
+        setValidationWarningModal({
+          type: 'excess',
+          count,
+          diff: count - 24
+        });
+        return;
+      }
+      if (count < 24) {
+        setValidationWarningModal({
+          type: 'deficit',
+          count,
+          diff: 24 - count
         });
         return;
       }
@@ -2894,6 +3051,65 @@ const ConfigPanel = ({ initialComp, compId, onSave, onCancel, onTotalReset }) =>
             {hasStarted && (
               <p className='text-[8px] text-center text-amber-300 font-bold uppercase italic mt-1'>
                 Torneo en curso. Para sortear de nuevo, concluye la edición o reinicia la competición.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* SECCIÓN ESPECIAL: GESTIÓN DE UEFA EUROPA LEAGUE (ELIMINATORIA PURA DESDE DIECISEISAVOS) */}
+      {isUEL && (
+        <div className='space-y-4 mb-6'>
+          <div className='bg-gradient-to-br from-amber-950/70 via-slate-900/90 to-orange-950/70 backdrop-blur-md rounded-3xl p-4 sm:p-5 border-2 border-amber-500/30 shadow-2xl space-y-3.5'>
+            <div className='flex items-center justify-between'>
+              <div className='flex items-center gap-2.5'>
+                <div className='w-10 h-10 rounded-2xl bg-amber-500/20 flex items-center justify-center border border-amber-500/40 text-amber-300 shadow-inner'>
+                  <CompetitionLogo compId='C3' size={24} showBackground={false} />
+                </div>
+                <div>
+                  <h3 className='text-sm sm:text-base font-black uppercase italic text-white'>UEFA Europa League</h3>
+                  <p className='text-[9px] text-amber-200 font-bold uppercase tracking-wider'>Eliminatoria Pura · 24 Clubes (Ida y Vuelta)</p>
+                </div>
+              </div>
+              <div className='px-2.5 py-1 rounded-xl text-[10px] font-black uppercase border bg-amber-950/60 text-amber-300 border-amber-500/40'>
+                {(draft.teams || []).length} / 24
+              </div>
+            </div>
+
+            <div className='bg-black/30 p-3 rounded-2xl border border-white/5 space-y-1.5 text-[9px] font-bold text-slate-300'>
+              <p className='text-amber-300 font-black uppercase flex items-center gap-1'><Layers size={12} /> Estructura de la Competición:</p>
+              <p>• <strong className='text-white'>16 Clubes de Liga (5º al 8º de ES, IT, EN, DE):</strong> Juegan Dieciseisavos de Final (Ida y Vuelta).</p>
+              <p>• <strong className='text-white'>8 Repescados de Champions League (3º de Fase de Grupos):</strong> Se incorporan directamente en Octavos de Final.</p>
+            </div>
+
+            <button
+              onClick={() => {
+                if (hasStarted) return;
+                let compsState: any = null;
+                try {
+                  compsState = JSON.parse(window.localStorage.getItem(`${APP_ID}_comps`) || '{}');
+                } catch (e) {}
+                const shuffled = getShuffleData('C3', compsState || getDefaultComps());
+                setDraft(prev => ({
+                  ...prev,
+                  ...shuffled
+                }));
+                setAnnexToast('¡Cruces de Dieciseisavos reordenados con éxito!');
+                setTimeout(() => setAnnexToast(null), 3000);
+              }}
+              disabled={hasStarted}
+              className={`w-full py-3.5 px-4 rounded-2xl text-[10px] sm:text-xs font-black uppercase italic tracking-wider flex items-center justify-center gap-2 transition-all shadow-xl active:scale-95 ${
+                hasStarted
+                  ? 'opacity-40 cursor-not-allowed bg-amber-950/20 border border-amber-500/10 text-amber-400/50'
+                  : 'bg-gradient-to-r from-amber-600 via-orange-600 to-amber-600 hover:from-amber-500 hover:to-orange-500 text-white border-2 border-amber-400/50 shadow-amber-500/25'
+              }`}
+            >
+              <Dices size={16} className='text-white' /> Reordenar Cruces de Dieciseisavos
+            </button>
+
+            {hasStarted && (
+              <p className='text-[8px] text-center text-amber-300 font-bold uppercase italic mt-1'>
+                Torneo en curso. Para reordenar cruces, concluye la edición o reinicia la competición.
               </p>
             )}
           </div>
@@ -3394,30 +3610,47 @@ function DiceFootballApp() {
   const [comps, setComps] = useState(() => {
     const defaultComps = getDefaultComps();
     try {
-      const saved = window.localStorage.getItem(`${APP_ID}_comps`);
+      // Intentar cargar la versión actual o migrar versiones anteriores
+      const saved = window.localStorage.getItem(`${APP_ID}_comps`) || 
+                    window.localStorage.getItem('dice-football-hub-elite-v6_comps');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
           const merged = { ...defaultComps };
-          const syncList = (list: any[]) => {
-            if (!Array.isArray(list)) return list;
+          const syncList = (list: any[], defaultList?: any[]) => {
+            if (!Array.isArray(list)) return defaultList || [];
+            // Si la lista de la liga no tiene el mismo número de equipos que los nuevos presets, usar default
+            if (defaultList && Array.isArray(defaultList) && defaultList.length > 0 && list.length !== defaultList.length) {
+              return defaultList;
+            }
             return list.map((t: any) => {
               const preset = getPresetStatsForTeam(t?.name);
               if (preset) {
-                return { ...t, att: preset.att, opp: preset.opp, def: preset.def };
+                return {
+                  ...t,
+                  att: preset.att,
+                  opp: preset.opp,
+                  def: preset.def,
+                  color1: preset.color1 || t.color1,
+                  color2: preset.color2 || t.color2,
+                  league: preset.league || t.league
+                };
               }
               return t;
             });
           };
 
-          Object.keys(parsed).forEach(key => {
-            if (merged[key]) {
+          Object.keys(defaultComps).forEach(key => {
+            if (parsed[key]) {
               const savedComp = parsed[key];
+              const isFresh = (!savedComp.matchday || savedComp.matchday === 0) && (!savedComp.history || savedComp.history.length === 0);
+              const isFresh2 = (!savedComp.matchday2 || savedComp.matchday2 === 0) && (!savedComp.history2 || savedComp.history2.length === 0);
+              
               merged[key] = {
-                ...merged[key],
+                ...defaultComps[key],
                 ...savedComp,
-                teams: syncList(savedComp.teams || merged[key].teams),
-                teams2: syncList(savedComp.teams2 || merged[key].teams2),
+                teams: isFresh ? defaultComps[key].teams : syncList(savedComp.teams, defaultComps[key].teams),
+                teams2: isFresh2 ? defaultComps[key].teams2 : syncList(savedComp.teams2, defaultComps[key].teams2),
                 id: key
               };
             }
@@ -3534,6 +3767,9 @@ function DiceFootballApp() {
     } catch (e) {}
     return { ...DEFAULT_SEASON_STATE };
   });
+
+  const [isSeasonCalendarOpen, setIsSeasonCalendarOpen] = useState(false);
+  const [milestoneToast, setMilestoneToast] = useState<{ title: string; desc?: string; week: number } | null>(null);
 
   useEffect(() => { try { window.localStorage.setItem(SEASON_KEY, JSON.stringify(seasonState)); } catch(e){} }, [seasonState]);
 
@@ -5038,15 +5274,85 @@ function DiceFootballApp() {
     }
   };
 
-  // Botón "Simular jornada global" / "Simular semana": resuelve la jornada actual en TODAS las ligas.
+  // Botón "Simular Semana": resuelve la jornada y fixtures correspondientes a la semana en TODAS las competiciones y ligas.
   // Si hay una carrera activa con partido pendiente en esta jornada, se juega asistido por la IA para el entrenador.
-  const simulateAllPendingLeagues = () => {
-    if (career?.active && careerTeam && careerFixture && !careerDivisionFinished) {
-      simulateCareerMatchday();
-    } else {
-      syncLeaguesToGlobal(LEAGUE_IDS);
+  const simulateSeasonWeek = () => {
+    const currentWk = seasonState.currentWeek || 1;
+    const weekData = getSemanaCalendario(currentWk);
+
+    if (weekData) {
+      const fixtures = weekData.fixtures || [];
+      const milestoneFixtures = fixtures.filter(f => !f.esPartido);
+      if (milestoneFixtures.length > 0) {
+        const topMilestone = milestoneFixtures[0];
+        setMilestoneToast({
+          title: topMilestone.ronda,
+          desc: topMilestone.descripcion || '',
+          week: currentWk
+        });
+      }
     }
+
+    // 1. Simular jornada de Liga si la semana la incluye
+    const hasLeague = weekData?.fixtures?.some(f => f.competicion === 'LIGA' && f.esPartido);
+    if (hasLeague || !weekData) {
+      if (career?.active && careerTeam && careerFixture && !careerDivisionFinished) {
+        simulateCareerMatchday();
+      } else {
+        syncLeaguesToGlobal(LEAGUE_IDS);
+      }
+    }
+
+    // 2. Simular Champions League si la semana incluye Champions
+    const hasChampions = weekData?.fixtures?.some(f => f.competicion === 'CHAMPIONS' && f.esPartido);
+    if (hasChampions) {
+      setComps(prev => {
+        let next = { ...prev };
+        let c1 = next['C1'];
+        if (!c1 || !c1.teams || c1.teams.length === 0) {
+          const autoData = getAutoFillData('C1', next);
+          if (autoData) {
+            c1 = { ...next['C1'], ...autoData, id: 'C1', name: 'Champions League', type: 'cup' };
+          }
+        }
+        if (c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado') {
+          next['C1'] = simulateSingleCupStage(c1, 'C1');
+        }
+        return next;
+      });
+    }
+
+    // 3. Simular Europa League si la semana incluye Europa League
+    const hasEuropa = weekData?.fixtures?.some(f => f.competicion === 'EUROPA_LEAGUE' && f.esPartido);
+    if (hasEuropa) {
+      setComps(prev => {
+        let next = { ...prev };
+        let c3 = next['C3'];
+        if (!c3 || !c3.teams || c3.teams.length === 0) {
+          const autoData = getAutoFillData('C3', next);
+          if (autoData) {
+            c3 = { ...next['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+          }
+        }
+        if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
+          next['C3'] = simulateSingleCupStage(c3, 'C3');
+        }
+        return next;
+      });
+    }
+
+    // 4. Incrementar la semana de la temporada (tope 42)
+    setSeasonState(s => ({
+      ...s,
+      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
+    }));
   };
+
+  const simulateUntilNextMatch = () => {
+    simulateSeasonWeek();
+  };
+
+  const simulateAllPendingLeagues = simulateSeasonWeek;
 
   // Simula hasta el final (100% de jornadas) todas las ligas europeas pendientes
   // Permite cerrar todas las ligas restantes desde la interfaz de carrera directamente
@@ -5720,206 +6026,215 @@ function DiceFootballApp() {
     executeCareerChampionsSimulatedMatch(injuryAttr, trainingFeedback, extraTrainingPe, newImmunityWeeks, injuryOccurredInSim);
   };
 
-  // Simulación completa de una copa / torneo hasta su finalización en una sola ejecución pura
-  const simulateEntireCupToFinish = (initialComp: any, compId: string = 'C1') => {
+  // Simulación de una sola etapa / jornada de una copa (Champions, Europa League o Mundial)
+  const simulateSingleCupStage = (initialComp: any, compId: string = 'C1') => {
     if (!initialComp || initialComp.type === 'league') return initialComp;
     let comp = JSON.parse(JSON.stringify(initialComp));
     const targetId = comp.id || compId || (comp.name?.includes('Champions') || (Array.isArray(comp.groups) && comp.groups.length === 8) ? 'C1' : 'C2');
     comp.id = targetId;
     const isChampions = (targetId === 'C1' || targetId === 'C3' || comp.name?.includes('Champions') || comp.name?.includes('Europa')) && targetId !== 'C2' && !comp.name?.includes('Mundial') && !comp.name?.includes('World');
     const isWorldCup = targetId === 'C2' || comp.name?.includes('Mundial') || comp.name?.includes('World');
-    let guard = 0;
 
-    while (guard++ < 40) {
-      if (comp.phase === 'Terminado' || comp.showWinner) break;
+    if (comp.phase === 'Terminado' || comp.showWinner) return comp;
 
-      if (comp.phase === 'groups') {
-        const maxMatchdays = isWorldCup ? 3 : 6;
-        const results: any[] = [];
+    if (comp.phase === 'groups') {
+      const maxMatchdays = isWorldCup ? 3 : 6;
+      const results: any[] = [];
 
-        (comp.groups || []).forEach((group: any) => {
-          const groupTeams = (comp.teams || []).filter((t: any) => group.teamIds?.includes(t.id));
-          const schedule = generateLeagueSchedule(groupTeams, !isWorldCup);
-          const currentRound = schedule[(comp.matchday || 0) % maxMatchdays];
-          if (currentRound) {
-            currentRound.forEach((m: any) => {
-              const h = (comp.teams || []).find((t: any) => t.id === m.homeId);
-              const a = (comp.teams || []).find((t: any) => t.id === m.awayId);
-              const { sh, sa } = simMatchGoals(h?.opp, h?.att, a?.def, a?.opp, a?.att, h?.def);
-              results.push({ hId: m.homeId, aId: m.awayId, sh, sa, penH: null, penA: null });
-            });
-          }
-        });
+      (comp.groups || []).forEach((group: any) => {
+        const groupTeams = (comp.teams || []).filter((t: any) => group.teamIds?.includes(t.id));
+        const schedule = generateLeagueSchedule(groupTeams, !isWorldCup);
+        const currentRound = schedule[(comp.matchday || 0) % maxMatchdays];
+        if (currentRound) {
+          currentRound.forEach((m: any) => {
+            const h = (comp.teams || []).find((t: any) => t.id === m.homeId);
+            const a = (comp.teams || []).find((t: any) => t.id === m.awayId);
+            const { sh, sa } = simMatchGoals(h?.opp, h?.att, a?.def, a?.opp, a?.att, h?.def);
+            results.push({ hId: m.homeId, aId: m.awayId, sh, sa, penH: null, penA: null });
+          });
+        }
+      });
 
-        const updatedTeams = (comp.teams || []).map((t: any) => {
-          const res = results.find(r => r.hId === t.id || r.aId === t.id);
-          if (!res) return t;
-          const isHome = res.hId === t.id;
-          const gf = isHome ? res.sh : res.sa;
-          const ga = isHome ? res.sa : res.sh;
-          const w = gf > ga ? 1 : 0;
-          const d = gf === ga ? 1 : 0;
-          const l = gf < ga ? 1 : 0;
-          return {
-            ...t,
-            p: (t.p || 0) + 1,
-            w: (t.w || 0) + w,
-            d: (t.d || 0) + d,
-            l: (t.l || 0) + l,
-            gf: (t.gf || 0) + gf,
-            ga: (t.ga || 0) + ga,
-            pts: (t.pts || 0) + (w * 3 + d)
-          };
-        });
+      const updatedTeams = (comp.teams || []).map((t: any) => {
+        const res = results.find(r => r.hId === t.id || r.aId === t.id);
+        if (!res) return t;
+        const isHome = res.hId === t.id;
+        const gf = isHome ? res.sh : res.sa;
+        const ga = isHome ? res.sa : res.sh;
+        const w = gf > ga ? 1 : 0;
+        const d = gf === ga ? 1 : 0;
+        const l = gf < ga ? 1 : 0;
+        return {
+          ...t,
+          p: (t.p || 0) + 1,
+          w: (t.w || 0) + w,
+          d: (t.d || 0) + d,
+          l: (t.l || 0) + l,
+          gf: (t.gf || 0) + gf,
+          ga: (t.ga || 0) + ga,
+          pts: (t.pts || 0) + (w * 3 + d)
+        };
+      });
 
-        const nextMatchday = (comp.matchday || 0) + 1;
-        const isEndOfGroups = nextMatchday >= maxMatchdays;
-        let newBracket = comp.bracket;
-        if (isEndOfGroups) {
-          newBracket = generateKnockoutBrackets({ ...comp, teams: updatedTeams });
+      const nextMatchday = (comp.matchday || 0) + 1;
+      const isEndOfGroups = nextMatchday >= maxMatchdays;
+      let newBracket = comp.bracket;
+      if (isEndOfGroups) {
+        newBracket = generateKnockoutBrackets({ ...comp, teams: updatedTeams });
+      }
+
+      comp = {
+        ...comp,
+        teams: updatedTeams,
+        history: [{ day: 'Jornada ' + nextMatchday, results }, ...(comp.history || [])],
+        matchday: nextMatchday,
+        phase: isEndOfGroups ? (newBracket?.Octavos ? 'Octavos' : (newBracket?.Dieciseisavos ? 'Dieciseisavos' : 'Cuartos')) : 'groups',
+        bracket: newBracket
+      };
+    } else {
+      // Knockout
+      const phase = comp.phase;
+      const isVuelta = isChampions && (comp.matchday || 0) % 2 !== 0 && phase !== 'Final';
+      const newBracket = { ...comp.bracket };
+      const matchesToProcess = Array.isArray(newBracket[phase]) ? newBracket[phase] : [newBracket[phase]].filter(Boolean);
+      const allResults: any[] = [];
+
+      matchesToProcess.forEach((m: any) => {
+        if (!m) return;
+        const homeId = isVuelta ? m.aId : m.hId;
+        const awayId = isVuelta ? m.hId : m.aId;
+        const h = (comp.teams || []).find((t: any) => t.id === homeId);
+        const a = (comp.teams || []).find((t: any) => t.id === awayId);
+        const { sh: simH, sa: simA } = simMatchGoals(h?.opp, h?.att, a?.def, a?.opp, a?.att, h?.def);
+
+        const matchSh = isVuelta ? simA : simH;
+        const matchSa = isVuelta ? simH : simA;
+        let penH: any = null, penA: any = null;
+
+        const isDraw = (isChampions && isVuelta && phase !== 'Final')
+          ? ((m.sh || 0) + matchSh === (m.sa || 0) + matchSa)
+          : (matchSh === matchSa);
+
+        if (isDraw && (!isChampions || isVuelta || phase === 'Final')) {
+          const penShootout = simPenaltyShootout(h?.att || 1, a?.def || 1, a?.att || 1, h?.def || 1);
+          penH = isVuelta ? penShootout.scoreA : penShootout.scoreH;
+          penA = isVuelta ? penShootout.scoreH : penShootout.scoreA;
         }
 
-        comp = {
-          ...comp,
-          teams: updatedTeams,
-          history: [{ day: 'Jornada ' + nextMatchday, results }, ...(comp.history || [])],
-          matchday: nextMatchday,
-          phase: isEndOfGroups ? (newBracket?.Octavos ? 'Octavos' : 'Cuartos') : 'groups',
-          bracket: newBracket
-        };
-      } else {
-        // Knockout
-        const phase = comp.phase;
-        const isVuelta = isChampions && (comp.matchday || 0) % 2 !== 0 && phase !== 'Final';
-        const newBracket = { ...comp.bracket };
-        const matchesToProcess = Array.isArray(newBracket[phase]) ? newBracket[phase] : [newBracket[phase]].filter(Boolean);
-        const allResults: any[] = [];
+        if (isVuelta) {
+          m.sh2 = matchSh;
+          m.sa2 = matchSa;
+        } else {
+          m.sh = matchSh;
+          m.sa = matchSa;
+        }
+        if (penH !== null) {
+          m.penH = penH;
+          m.penA = penA;
+        }
+        allResults.push(isVuelta
+          ? { hId: m.aId, aId: m.hId, sh: matchSa, sa: matchSh, penH: penA, penA: penH }
+          : { hId: m.hId, aId: m.aId, sh: matchSh, sa: matchSa, penH, penA }
+        );
+      });
 
-        matchesToProcess.forEach((m: any) => {
-          if (!m) return;
-          const homeId = isVuelta ? m.aId : m.hId;
-          const awayId = isVuelta ? m.hId : m.aId;
-          const h = (comp.teams || []).find((t: any) => t.id === homeId);
-          const a = (comp.teams || []).find((t: any) => t.id === awayId);
-          const { sh: simH, sa: simA } = simMatchGoals(h?.opp, h?.att, a?.def, a?.opp, a?.att, h?.def);
-
-          const matchSh = isVuelta ? simA : simH;
-          const matchSa = isVuelta ? simH : simA;
-          let penH: any = null, penA: any = null;
-
-          const isDraw = (isChampions && isVuelta && phase !== 'Final')
-            ? ((m.sh || 0) + matchSh === (m.sa || 0) + matchSa)
-            : (matchSh === matchSa);
-
-          if (isDraw && (!isChampions || isVuelta || phase === 'Final')) {
-            const penShootout = simPenaltyShootout(h?.att || 1, a?.def || 1, a?.att || 1, h?.def || 1);
-            penH = isVuelta ? penShootout.scoreA : penShootout.scoreH;
-            penA = isVuelta ? penShootout.scoreH : penShootout.scoreA;
-          }
-
-          if (isVuelta) {
-            m.sh2 = matchSh;
-            m.sa2 = matchSa;
-          } else {
-            m.sh = matchSh;
-            m.sa = matchSa;
-          }
-          if (penH !== null) {
-            m.penH = penH;
-            m.penA = penA;
-          }
-          allResults.push(isVuelta
-            ? { hId: m.aId, aId: m.hId, sh: matchSa, sa: matchSh, penH: penA, penA: penH }
-            : { hId: m.hId, aId: m.aId, sh: matchSh, sa: matchSa, penH, penA }
-          );
+      let nextPhase = phase;
+      let showWinner = false;
+      if (!isChampions || isVuelta || phase === 'Final') {
+        const winners = matchesToProcess.map((m: any) => {
+          const tH = isChampions && phase !== 'Final' ? ((m.sh || 0) + (m.sh2 || 0)) : (m.sh || 0);
+          const tA = isChampions && phase !== 'Final' ? ((m.sa || 0) + (m.sa2 || 0)) : (m.sa || 0);
+          if (tH > tA) return m.hId;
+          if (tA > tH) return m.aId;
+          return (m.penH || 0) > (m.penA || 0) ? m.hId : m.aId;
         });
 
-        let nextPhase = phase;
-        let showWinner = false;
-        if (!isChampions || isVuelta || phase === 'Final') {
-          const winners = matchesToProcess.map((m: any) => {
-            const tH = isChampions && phase !== 'Final' ? ((m.sh || 0) + (m.sh2 || 0)) : (m.sh || 0);
-            const tA = isChampions && phase !== 'Final' ? ((m.sa || 0) + (m.sa2 || 0)) : (m.sa || 0);
-            if (tH > tA) return m.hId;
-            if (tA > tH) return m.aId;
-            return (m.penH || 0) > (m.penA || 0) ? m.hId : m.aId;
+        if (phase === 'Dieciseisavos') {
+          nextPhase = 'Octavos';
+          const repescadoTeams = (comp.teams || []).filter((t: any) => t.isRepesca || (t.clOrigin && t.clOrigin.includes('Repesca')));
+          newBracket.Octavos = Array(8).fill(0).map((_, i) => ({
+            id: 'O' + (i + 1),
+            hId: winners[i] ?? comp.teams?.[i]?.id ?? 0,
+            aId: repescadoTeams[i]?.id ?? comp.teams?.[16 + i]?.id ?? (17 + i),
+            sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
+          }));
+        } else if (phase === 'Octavos') {
+          nextPhase = 'Cuartos';
+          newBracket.Cuartos = Array(4).fill(0).map((_, i) => ({
+            id: 'C' + (i + 1),
+            hId: winners[i * 2] ?? comp.teams?.[i * 2]?.id ?? 0,
+            aId: winners[i * 2 + 1] ?? comp.teams?.[i * 2 + 1]?.id ?? 1,
+            sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
+          }));
+        } else if (phase === 'Cuartos') {
+          nextPhase = 'Semis';
+          newBracket.Semis = Array(2).fill(0).map((_, i) => ({
+            id: 'S' + (i + 1),
+            hId: winners[i * 2] ?? comp.teams?.[i * 2]?.id ?? 0,
+            aId: winners[i * 2 + 1] ?? comp.teams?.[i * 2 + 1]?.id ?? 1,
+            sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
+          }));
+        } else if (phase === 'Semis') {
+          const losers = matchesToProcess.map((m: any, i: number) => {
+            return m.hId === winners[i] ? m.aId : m.hId;
           });
-
-          if (phase === 'Dieciseisavos') {
-            nextPhase = 'Octavos';
-            const repescadoTeams = (comp.teams || []).filter((t: any) => t.isRepesca || (t.clOrigin && t.clOrigin.includes('Repesca')));
-            newBracket.Octavos = Array(8).fill(0).map((_, i) => ({
-              id: 'O' + (i + 1),
-              hId: winners[i] ?? comp.teams?.[i]?.id ?? 0,
-              aId: repescadoTeams[i]?.id ?? comp.teams?.[16 + i]?.id ?? (17 + i),
-              sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
-            }));
-          } else if (phase === 'Octavos') {
-            nextPhase = 'Cuartos';
-            newBracket.Cuartos = Array(4).fill(0).map((_, i) => ({
-              id: 'C' + (i + 1),
-              hId: winners[i * 2] ?? comp.teams?.[i * 2]?.id ?? 0,
-              aId: winners[i * 2 + 1] ?? comp.teams?.[i * 2 + 1]?.id ?? 1,
-              sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
-            }));
-          } else if (phase === 'Cuartos') {
-            nextPhase = 'Semis';
-            newBracket.Semis = Array(2).fill(0).map((_, i) => ({
-              id: 'S' + (i + 1),
-              hId: winners[i * 2] ?? comp.teams?.[i * 2]?.id ?? 0,
-              aId: winners[i * 2 + 1] ?? comp.teams?.[i * 2 + 1]?.id ?? 1,
-              sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
-            }));
-          } else if (phase === 'Semis') {
-            const losers = matchesToProcess.map((m: any, i: number) => {
-              return m.hId === winners[i] ? m.aId : m.hId;
-            });
-            newBracket.Final = [{
-              id: 'F1',
-              hId: winners[0] ?? comp.teams?.[0]?.id ?? 0,
-              aId: winners[1] ?? comp.teams?.[1]?.id ?? 1,
+          newBracket.Final = [{
+            id: 'F1',
+            hId: winners[0] ?? comp.teams?.[0]?.id ?? 0,
+            aId: winners[1] ?? comp.teams?.[1]?.id ?? 1,
+            sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
+          }];
+          if (isWorldCup) {
+            newBracket.TercerPuesto = [{
+              id: 'TP1',
+              hId: losers[0] ?? comp.teams?.[2]?.id ?? 0,
+              aId: losers[1] ?? comp.teams?.[3]?.id ?? 1,
               sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
             }];
-            if (isWorldCup) {
-              newBracket.TercerPuesto = [{
-                id: 'TP1',
-                hId: losers[0] ?? comp.teams?.[2]?.id ?? 0,
-                aId: losers[1] ?? comp.teams?.[3]?.id ?? 1,
-                sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
-              }];
-              nextPhase = 'TercerPuesto';
-            } else {
-              nextPhase = 'Final';
-            }
-          } else if (phase === 'TercerPuesto') {
-            nextPhase = 'Final';
+            nextPhase = 'TercerPuesto';
           } else {
-            nextPhase = 'Terminado';
-            showWinner = true;
+            nextPhase = 'Final';
           }
+        } else if (phase === 'TercerPuesto') {
+          nextPhase = 'Final';
+        } else {
+          nextPhase = 'Terminado';
+          showWinner = true;
         }
-
-        const dayLabel = phase === 'Final'
-          ? 'Gran Final'
-          : phase === 'TercerPuesto'
-          ? 'Tercer Puesto'
-          : (phase + (isChampions ? (isVuelta ? ' (Vuelta)' : ' (Ida)') : ''));
-
-        comp = {
-          ...comp,
-          history: [{ day: dayLabel, results: allResults }, ...(comp.history || [])],
-          matchday: (comp.matchday || 0) + 1,
-          phase: nextPhase,
-          bracket: newBracket,
-          showWinner
-        };
       }
+
+      const dayLabel = phase === 'Final'
+        ? 'Gran Final'
+        : phase === 'TercerPuesto'
+        ? 'Tercer Puesto'
+        : (phase + (isChampions ? (isVuelta ? ' (Vuelta)' : ' (Ida)') : ''));
+
+      comp = {
+        ...comp,
+        history: [{ day: dayLabel, results: allResults }, ...(comp.history || [])],
+        matchday: (comp.matchday || 0) + 1,
+        phase: nextPhase,
+        bracket: newBracket,
+        showWinner
+      };
     }
 
     if (isChampions && comp.bracket) {
       comp.bracket = sanitizeChampionsBracket(comp.bracket, comp.teams);
     }
 
+    return comp;
+  };
+
+  // Simulación completa de una copa / torneo hasta su finalización en una sola ejecución pura
+  const simulateEntireCupToFinish = (initialComp: any, compId: string = 'C1') => {
+    if (!initialComp || initialComp.type === 'league') return initialComp;
+    let comp = initialComp;
+    let guard = 0;
+    while (guard++ < 40) {
+      if (comp.phase === 'Terminado' || comp.showWinner) break;
+      comp = simulateSingleCupStage(comp, compId);
+    }
     return comp;
   };
 
@@ -7883,7 +8198,7 @@ function DiceFootballApp() {
            </div>
         </div>
 
-        {activeComp.type !== 'league' && activeComp.phase === 'groups' && Array.isArray(activeComp.groups) && (
+        {activeComp.type !== 'league' && activeComp.phase === 'groups' && Array.isArray(activeComp.groups) && activeCompId !== 'C3' && (
           <div className='grid grid-cols-1 gap-6 mb-8'>
             {activeComp.groups.map((group, gi) => {
               const isCL = activeCompId === 'C1';
@@ -7935,6 +8250,25 @@ function DiceFootballApp() {
                 </section>
               );
             })}
+          </div>
+        )}
+
+        {/* BANNER INFORMATIVO UEFA EUROPA LEAGUE */}
+        {activeCompId === 'C3' && !cupTournamentEnded && (
+          <div className='bg-gradient-to-r from-amber-950/60 via-slate-900/80 to-orange-950/60 backdrop-blur-md rounded-2xl p-3.5 border border-amber-500/30 mb-4 shadow-lg flex items-center gap-3'>
+            <div className='w-9 h-9 rounded-xl bg-amber-500/20 flex items-center justify-center border border-amber-500/40 text-amber-300 shrink-0'>
+              <CompetitionLogo compId='C3' size={20} showBackground={false} />
+            </div>
+            <div className='min-w-0 flex-1 text-[9px] text-slate-300 leading-snug'>
+              <p className='text-amber-300 font-black uppercase text-[10px]'>Formato Eliminatoria Pura</p>
+              <p>
+                {activeComp.phase === 'Dieciseisavos'
+                  ? '16 clubes de liga disputan los Dieciseisavos a ida y vuelta. Los 8 ganadores avanzarán a Octavos para medirse a los 8 repescados de Champions League.'
+                  : activeComp.phase === 'Octavos'
+                  ? 'Octavos de Final: Los 8 clasificados de Dieciseisavos se enfrentan a los 8 repescados de la UEFA Champions League a ida y vuelta.'
+                  : 'Fase final a eliminatoria directa camino al título de UEFA Europa League.'}
+              </p>
+            </div>
           </div>
         )}
 
@@ -8241,6 +8575,94 @@ function DiceFootballApp() {
               </tbody>
             </table>
           </div>
+        ) : activeCompId === 'C3' ? (
+          /* VISTA EXCLUSIVA DE PARTICIPANTES UEFA EUROPA LEAGUE */
+          <div className='space-y-6'>
+            {/* Banner de formato */}
+            <div className='bg-gradient-to-r from-amber-950/70 via-slate-900/90 to-orange-950/70 backdrop-blur-md rounded-3xl p-4 border border-amber-500/30 shadow-xl flex items-center justify-between'>
+              <div>
+                <span className='text-[8px] font-black uppercase tracking-widest text-amber-400 flex items-center gap-1.5'>
+                  <CompetitionLogo compId='C3' size={14} showBackground={false} /> UEFA Europa League
+                </span>
+                <h3 className='text-sm font-black uppercase italic text-white mt-0.5'>24 Clubes en Eliminatoria Directa</h3>
+              </div>
+              <button
+                onClick={() => setCompView('bracket')}
+                className='px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[8.5px] font-black uppercase tracking-wider border border-amber-400/30 transition-all flex items-center gap-1'
+              >
+                <span>Ver Llaves</span>
+                <ArrowRight size={11} />
+              </button>
+            </div>
+
+            {/* 16 CLUBES DE LIGA (DISPUTAN DIECISEISAVOS) */}
+            <div className='bg-slate-900/30 backdrop-blur-md rounded-[2rem] border border-white/10 p-4 shadow-xl'>
+              <div className='flex items-center justify-between mb-3 pb-2 border-b border-white/10'>
+                <h3 className='text-xs font-black uppercase text-amber-300 flex items-center gap-2'>
+                  <ShieldIcon size={14} /> 16 Clubes de Liga (Dieciseisavos de Final)
+                </h3>
+                <span className='text-[7.5px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30'>
+                  5.º - 8.º Puestos
+                </span>
+              </div>
+              <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                {(activeComp.teams || []).slice(0, 16).map((t: any, idx: number) => {
+                  const isUser = t.id === activeComp.userTeamId;
+                  return (
+                    <div key={t.id || idx} className={`flex items-center justify-between p-2.5 rounded-xl border ${isUser ? 'bg-amber-950/40 border-amber-400/60 shadow-inner' : 'bg-black/30 border-white/5'}`}>
+                      <div className='flex items-center gap-2 min-w-0 flex-1'>
+                        <span className='text-[9px] font-black text-slate-500 w-4'>{idx + 1}</span>
+                        <Shield color1={t.color1} color2={t.color2} initial={t.name} size='xs' isFlag={t.isFlag} />
+                        <div className='min-w-0 flex-1'>
+                          <span className={`text-[10px] font-bold uppercase truncate block ${isUser ? 'text-amber-300 font-black' : 'text-white'}`}>{t.name}</span>
+                          <span className='text-[7px] text-slate-400 uppercase font-medium'>{t.clOrigin || 'Liga Nacional'}</span>
+                        </div>
+                      </div>
+                      <div className='flex items-center gap-1.5 shrink-0 text-[8px] font-black text-slate-300 bg-slate-800/80 px-2 py-1 rounded-lg border border-white/10'>
+                        <span className='text-red-400'>{t.att}A</span>
+                        <span className='text-amber-400'>{t.opp}T</span>
+                        <span className='text-blue-400'>{t.def}D</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 8 CLUBES REPESCADOS DE CHAMPIONS (ENTRAN EN OCTAVOS) */}
+            <div className='bg-slate-900/30 backdrop-blur-md rounded-[2rem] border border-white/10 p-4 shadow-xl'>
+              <div className='flex items-center justify-between mb-3 pb-2 border-b border-white/10'>
+                <h3 className='text-xs font-black uppercase text-blue-300 flex items-center gap-2'>
+                  <Trophy size={14} className='text-blue-400' /> 8 Repescados de Champions League (Octavos)
+                </h3>
+                <span className='text-[7.5px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30'>
+                  3.º de Grupo UCL
+                </span>
+              </div>
+              <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                {(activeComp.teams || []).slice(16, 24).map((t: any, idx: number) => {
+                  const isUser = t.id === activeComp.userTeamId;
+                  return (
+                    <div key={t.id || idx} className={`flex items-center justify-between p-2.5 rounded-xl border ${isUser ? 'bg-blue-950/40 border-blue-400/60 shadow-inner' : 'bg-black/30 border-white/5'}`}>
+                      <div className='flex items-center gap-2 min-w-0 flex-1'>
+                        <span className='text-[9px] font-black text-blue-400 w-4'>{idx + 1}</span>
+                        <Shield color1={t.color1} color2={t.color2} initial={t.name} size='xs' isFlag={t.isFlag} />
+                        <div className='min-w-0 flex-1'>
+                          <span className={`text-[10px] font-bold uppercase truncate block ${isUser ? 'text-blue-300 font-black' : 'text-white'}`}>{t.name}</span>
+                          <span className='text-[7px] text-blue-300/80 uppercase font-medium'>{t.clOrigin || 'Champions League (3.º)'}</span>
+                        </div>
+                      </div>
+                      <div className='flex items-center gap-1.5 shrink-0 text-[8px] font-black text-slate-300 bg-slate-800/80 px-2 py-1 rounded-lg border border-white/10'>
+                        <span className='text-red-400'>{t.att}A</span>
+                        <span className='text-amber-400'>{t.opp}T</span>
+                        <span className='text-blue-400'>{t.def}D</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         ) : (
           <div className='space-y-8'>
             {/* Lógica original de Copas y Eliminatorias */}
@@ -8365,7 +8787,7 @@ function DiceFootballApp() {
           ) : (
             // Lógica intacta para torneos
             <div className='space-y-8'>
-              {(activeComp.groups || []).length > 0 && (
+              {activeCompId !== 'C3' && (activeComp.groups || []).length > 0 && (
                 <div className='space-y-6'>
                   <h2 className='text-xs font-black uppercase text-slate-200 border-b border-white/20 pb-2 drop-shadow-md'>Fase de Grupos</h2>
                   {(activeComp.groups || []).map((group, gi) => {
@@ -8819,7 +9241,31 @@ function DiceFootballApp() {
 
       <div className='relative z-10 max-w-md mx-auto min-h-screen flex flex-col'>
         <AnimatePresence mode='wait'>
-          {view === 'hub' && <motion.div key='hub' className='flex-grow flex flex-col' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}><HubView career={career} onOpenCareer={openCareer} setView={setView} setActiveCompId={setActiveCompId} setCompView={setCompView} comps={comps} seasonState={seasonState} pendingLeagueIds={pendingLeagueIds} allLeaguesFinished={allLeaguesFinished} championsFinished={championsFinished} onSimulateLeague={simulateLeagueToGlobal} onSimulateAll={simulateAllPendingLeagues} onNewSeason={startNewGlobalSeason} onSimulateChampions={simulateAllCareerChampions} /></motion.div>}
+          {view === 'hub' && (
+            <motion.div key='hub' className='flex-grow flex flex-col' initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <HubView
+                career={career}
+                onOpenCareer={openCareer}
+                setView={setView}
+                setActiveCompId={setActiveCompId}
+                setCompView={setCompView}
+                comps={comps}
+                seasonState={seasonState}
+                pendingLeagueIds={pendingLeagueIds}
+                allLeaguesFinished={allLeaguesFinished}
+                championsFinished={championsFinished}
+                onSimulateLeague={simulateLeagueToGlobal}
+                onSimulateAll={simulateAllPendingLeagues}
+                onSimulateWeek={simulateSeasonWeek}
+                onSimulateUntilNextMatch={simulateUntilNextMatch}
+                onNewSeason={startNewGlobalSeason}
+                onSimulateChampions={simulateAllCareerChampions}
+                onOpenSeasonCalendar={() => setIsSeasonCalendarOpen(true)}
+                milestoneToast={milestoneToast}
+                onDismissMilestoneToast={() => setMilestoneToast(null)}
+              />
+            </motion.div>
+          )}
           {view === 'rules' && <motion.div key='rules' className='flex-grow flex flex-col' initial={{ x: 300, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -300, opacity: 0 }}><RulesView setView={setView} /></motion.div>}
           {view === 'archive' && <motion.div key='archive' className='flex-grow flex flex-col' initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}><ArchiveView selectedArchiveEntry={selectedArchiveEntry} setSelectedArchiveEntry={setSelectedArchiveEntry} setView={setView} archive={archive} /></motion.div>}
           {view === 'competition' && <motion.div key='comp' className='flex-grow flex flex-col' initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.1, opacity: 0 }}><CompetitionView /></motion.div>}
@@ -8923,6 +9369,16 @@ function DiceFootballApp() {
               onSelectOption={handleSimulationInjuryChoice}
               onCancel={() => setSimulationInjuryAlert(null)}
               ui={careerUi}
+            />
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {isSeasonCalendarOpen && (
+            <SeasonCalendarModal
+              isOpen={isSeasonCalendarOpen}
+              onClose={() => setIsSeasonCalendarOpen(false)}
+              currentWeek={seasonState?.currentWeek || 1}
+              seasonNumber={seasonState?.season || 1}
             />
           )}
         </AnimatePresence>
