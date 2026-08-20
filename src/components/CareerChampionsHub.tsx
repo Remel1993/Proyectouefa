@@ -122,15 +122,16 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
 
           // Detectar si fue partido de eliminatoria de ida y vuelta
           let aggregateInfo: any = null;
-          const isKnockout = ['Octavos', 'Cuartos', 'Semis'].some(p => (h.day || '').includes(p));
-          const phaseKey = ['Octavos', 'Cuartos', 'Semis'].find(p => (h.day || '').includes(p));
+          const dayStr = String(h.day ?? '');
+          const isKnockout = ['Octavos', 'Cuartos', 'Semis'].some(p => dayStr.includes(p));
+          const phaseKey = ['Octavos', 'Cuartos', 'Semis'].find(p => dayStr.includes(p));
           
           if (isKnockout && phaseKey && safeBracket?.[phaseKey]) {
             const bMatches = Array.isArray(safeBracket[phaseKey]) ? safeBracket[phaseKey] : [safeBracket[phaseKey]];
             const bMatch = bMatches.find((bm: any) => bm && (bm.hId === userClId || bm.aId === userClId));
             if (bMatch && bMatch.sh !== null) {
               const hasVuelta = bMatch.sh2 !== null && bMatch.sh2 !== undefined;
-              const isVuelta = (h.day || '').includes('Vuelta') || hasVuelta;
+              const isVuelta = dayStr.includes('Vuelta') || hasVuelta;
 
               // En la ida: hId es Local, aId es Visitante
               // En la vuelta: aId es Local (recibe la vuelta), hId es Visitante
@@ -658,7 +659,9 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
 
                 <div className='flex items-center justify-between text-[8px] font-bold text-slate-400 px-1'>
                   <span>Balance Continental: +{lastPlayedChampionsMatch.pe || 0} PE ganados</span>
-                  <span className='text-amber-400 font-black'>+{lastPlayedChampionsMatch.rep || 0} Reputación</span>
+                  <span className={(lastPlayedChampionsMatch.rep || 0) > 0 ? 'text-emerald-400 font-black' : (lastPlayedChampionsMatch.rep || 0) < 0 ? 'text-rose-400 font-black' : 'text-slate-400 font-bold'}>
+                    {(lastPlayedChampionsMatch.rep || 0) > 0 ? `+${lastPlayedChampionsMatch.rep}` : `${lastPlayedChampionsMatch.rep || 0}`} Reputación
+                  </span>
                 </div>
               </div>
             )}
@@ -851,14 +854,6 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 </div>
 
                 <div className='flex flex-col sm:flex-row gap-2 justify-center pt-2'>
-                  {onSimulateAllChampions && !isFinished && (
-                    <button
-                      onClick={onSimulateAllChampions}
-                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all shadow flex items-center justify-center gap-2'
-                    >
-                      <Zap size={14} className='text-yellow-300' /> Simular Torneo Completo
-                    </button>
-                  )}
                   {onOpenNewSeason && isFinished && (
                     <button
                       onClick={onOpenNewSeason}
@@ -938,14 +933,6 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 </div>
 
                 <div className='flex flex-col sm:flex-row gap-2 justify-center pt-2'>
-                  {onSimulateAllChampions && !isFinished && (
-                    <button
-                      onClick={onSimulateAllChampions}
-                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white px-5 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all shadow flex items-center justify-center gap-2'
-                    >
-                      <Zap size={14} className='text-yellow-300' /> Simular Resto de la Champions League
-                    </button>
-                  )}
                   {onOpenNewSeason && isFinished && (
                     <button
                       onClick={onOpenNewSeason}
@@ -1412,7 +1399,8 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
           >
             {clComp.history?.length > 0 ? (
               clComp.history.map((h: any, i: number) => {
-                const isKnockoutDay = ['Octavos', 'Cuartos', 'Semis', 'Final'].some(k => (h.day || '').includes(k));
+                const dayStr = String(h.day ?? '');
+                const isKnockoutDay = ['Octavos', 'Cuartos', 'Semis', 'Final'].some(k => dayStr.includes(k));
                 return (
                   <div key={i} className='bg-slate-900/80 rounded-3xl p-4 border border-white/10 space-y-3 shadow-lg'>
                     <div className='flex items-center justify-between pb-2 border-b border-white/5'>
@@ -1422,7 +1410,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                             ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                             : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                         }`}>
-                          {h.day}
+                          {dayStr}
                         </span>
                       </div>
                       <span className='text-[8px] font-bold text-slate-400'>

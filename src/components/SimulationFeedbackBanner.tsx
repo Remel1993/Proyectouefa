@@ -1,39 +1,59 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import {
-  Dumbbell, Dices, Zap, AlertTriangle, ShieldCheck, CheckCircle2, X
+  X,
+  TrendingUp,
+  TrendingDown,
+  Target,
+  Sparkles,
+  Award,
+  AlertTriangle,
+  CheckCircle,
+  Flame,
+  Star,
+  Eye,
+  ShieldCheck
 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
-export interface SimulationFeedbackData {
-  matchday: number;
+export interface SimulationFeedback {
+  isChampions?: boolean;
+  phaseLabel?: string;
+  headline?: string;
+  summary?: string;
+  matchday?: number;
   homeName?: string;
   awayName?: string;
   scoreH?: number;
   scoreA?: number;
   myGf?: number;
   myGa?: number;
-  result?: 'W' | 'D' | 'L';
+  result?: 'W' | 'D' | 'L' | string;
   posBefore?: number;
   posAfter?: number;
+  posDelta?: number;
+  expectedPos?: number;
+  targetPos?: number;
+  tier?: number;
+  div?: number;
   repDelta?: number;
+  repGained?: number;
   peDelta?: number;
-  isHome?: boolean;
+  peGained?: number;
+  matchPeGained?: number;
+  trainingPeGained?: number;
+  trainingResult?: any;
   rivalName?: string;
-  isChampions?: boolean;
-  trainingResult?: {
-    simulated: boolean;
-    die: number;
-    peGained: number;
-    injuryOccurred: boolean;
-    immunityPrevented: boolean;
-    statLost?: string;
-    message?: string;
-    newImmunityWeeks?: number;
-  };
+  isHome?: boolean;
+  cleanSheet?: boolean;
+  isGesta?: boolean;
+  bonusPE?: number;
+  bonusRep?: number;
+  injuryOccurred?: boolean;
+  immunityWeeks?: number;
 }
 
 interface SimulationFeedbackBannerProps {
-  feedback: SimulationFeedbackData | null;
+  feedback: SimulationFeedback;
   onDismiss?: () => void;
 }
 
@@ -41,111 +61,211 @@ export const SimulationFeedbackBanner: React.FC<SimulationFeedbackBannerProps> =
   feedback,
   onDismiss
 }) => {
-  if (!feedback || !feedback.trainingResult) return null;
+  if (!feedback) return null;
 
-  const train = feedback.trainingResult;
-  const isSuccess = train.peGained > 0;
-  const isInjury = train.injuryOccurred && !train.immunityPrevented;
-  const isProtected = train.immunityPrevented;
+  const result = feedback.result;
+  const peGained = feedback.peDelta ?? feedback.peGained ?? 0;
+  const repGained = feedback.repDelta ?? feedback.repGained ?? 0;
+  const posBefore = feedback.posBefore;
+  const posAfter = feedback.posAfter;
+  const posDiff = posBefore !== undefined && posAfter !== undefined ? posBefore - posAfter : 0;
+
+  const targetPos = feedback.targetPos ?? 10;
+  const expectedPos = feedback.expectedPos ?? 10;
+
+  // Evaluación creativa de seguridad en el puesto y confianza de la directiva
+  let boardStatus = {
+    label: 'Objetivo en Curso',
+    riskTag: 'Puesto Seguro',
+    colorText: 'text-emerald-300',
+    colorBg: 'bg-emerald-500/20 border-emerald-500/40',
+    icon: CheckCircle
+  };
+
+  if (feedback.isChampions) {
+    if (result === 'W') {
+      boardStatus = {
+        label: 'Prestigio Europeo',
+        riskTag: 'Directiva Encantada ⭐',
+        colorText: 'text-blue-300',
+        colorBg: 'bg-blue-500/20 border-blue-500/40',
+        icon: Star
+      };
+    } else if (result === 'D') {
+      boardStatus = {
+        label: 'Opciones Vivas',
+        riskTag: 'En Competencia',
+        colorText: 'text-amber-300',
+        colorBg: 'bg-amber-500/20 border-amber-500/40',
+        icon: ShieldCheck
+      };
+    } else {
+      boardStatus = {
+        label: 'Revés Continental',
+        riskTag: 'Exigencia Máxima',
+        colorText: 'text-rose-300',
+        colorBg: 'bg-rose-500/20 border-rose-500/40',
+        icon: AlertTriangle
+      };
+    }
+  } else if (posAfter !== undefined) {
+    const diffToTarget = posAfter - targetPos; // <= 0 significa dentro del objetivo
+    const diffToExpected = expectedPos - posAfter; // >= 0 significa mejor de lo previsto por plantilla
+
+    if (posAfter <= targetPos) {
+      if (posAfter === 1 || diffToExpected >= 4) {
+        boardStatus = {
+          label: 'Liderando Proyecto',
+          riskTag: 'Directiva Encantada 🌟',
+          colorText: 'text-emerald-300',
+          colorBg: 'bg-emerald-500/25 border-emerald-500/50',
+          icon: Sparkles
+        };
+      } else {
+        boardStatus = {
+          label: `En Objetivo (Top ${targetPos})`,
+          riskTag: 'Puesto Seguro ✅',
+          colorText: 'text-emerald-300',
+          colorBg: 'bg-emerald-500/20 border-emerald-500/40',
+          icon: CheckCircle
+        };
+      }
+    } else {
+      if (diffToTarget <= 2 && diffToExpected >= -2) {
+        boardStatus = {
+          label: `A ${diffToTarget} puesto${diffToTarget > 1 ? 's' : ''} de meta`,
+          riskTag: 'Bajo Observación 👀',
+          colorText: 'text-amber-300',
+          colorBg: 'bg-amber-500/20 border-amber-500/40',
+          icon: Eye
+        };
+      } else if (diffToTarget <= 5 || diffToExpected >= -4) {
+        boardStatus = {
+          label: 'Fuera de Objetivos',
+          riskTag: 'Despido Probable ⚠️',
+          colorText: 'text-orange-400',
+          colorBg: 'bg-orange-500/20 border-orange-500/40',
+          icon: AlertTriangle
+        };
+      } else {
+        boardStatus = {
+          label: 'Zona Crítica',
+          riskTag: 'Ultimátum Directiva 🔥',
+          colorText: 'text-rose-400',
+          colorBg: 'bg-rose-600/30 border-rose-500/60',
+          icon: Flame
+        };
+      }
+    }
+  }
+
+  const StatusIcon = boardStatus.icon;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -10, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className={`w-full rounded-3xl border p-3.5 shadow-xl mb-4 relative overflow-hidden backdrop-blur-md transition-all ${
-        isSuccess
-          ? 'bg-gradient-to-r from-emerald-950/80 via-slate-900/90 to-emerald-950/80 border-emerald-500/40 shadow-[0_0_25px_rgba(16,185,129,0.15)]'
-          : isInjury
-          ? 'bg-gradient-to-r from-red-950/80 via-slate-900/90 to-red-950/80 border-red-500/40 shadow-[0_0_25px_rgba(239,68,68,0.15)]'
-          : isProtected
-          ? 'bg-gradient-to-r from-blue-950/80 via-slate-900/90 to-indigo-950/80 border-blue-500/40'
-          : 'bg-gradient-to-r from-slate-900/90 via-slate-950/90 to-slate-900/90 border-white/10'
-      }`}
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className="relative overflow-hidden rounded-2xl p-3 sm:p-3.5 border border-white/15 bg-gradient-to-r from-slate-900 via-slate-900/95 to-slate-900 shadow-xl backdrop-blur-md space-y-2.5"
     >
+      {/* 1. Barra Superior Compacta */}
       <div className="flex items-center justify-between gap-2">
-        {/* Encabezado del entrenamiento previo */}
-        <div className="flex items-center gap-2 min-w-0">
-          <div className={`p-1.5 rounded-xl flex items-center justify-center shrink-0 ${
-            isSuccess
-              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-              : isInjury
-              ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-              : isProtected
-              ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-              : 'bg-white/10 text-slate-300 border border-white/10'
-          }`}>
-            {isSuccess ? (
-              <Zap size={14} className="text-amber-400" />
-            ) : isInjury ? (
-              <AlertTriangle size={14} className="text-red-400" />
-            ) : isProtected ? (
-              <ShieldCheck size={14} className="text-blue-400" />
+        <div className="flex items-center gap-2 flex-wrap min-w-0">
+          <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200 border border-white/10 shrink-0">
+            {feedback.isChampions ? 'Champions League' : `Jornada ${feedback.matchday ?? ''}`}
+          </span>
+
+          {/* Badge de Seguridad en el Puesto y Directiva */}
+          <span className={`inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border shadow-sm ${boardStatus.colorBg} ${boardStatus.colorText}`}>
+            <StatusIcon className="w-3 h-3 shrink-0" />
+            <span>{boardStatus.riskTag}</span>
+          </span>
+        </div>
+
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors shrink-0"
+            title="Cerrar"
+            aria-label="Cerrar"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {/* 2. Cuadrícula Compacta de 3 Columnas Fundamentales */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+        {/* Columna A: Efecto en Tabla */}
+        <div className="bg-black/40 rounded-xl p-2 border border-white/5 flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-slate-800/80 border border-white/10 shrink-0">
+            {posDiff > 0 ? (
+              <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            ) : posDiff < 0 ? (
+              <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
             ) : (
-              <Dumbbell size={14} className="text-slate-300" />
+              <Target className="w-3.5 h-3.5 text-sky-400" />
             )}
           </div>
-          <div className="min-w-0">
-            <span className="text-[10px] font-black uppercase italic tracking-wider text-white flex items-center gap-1.5 truncate">
-              Entrenamiento Previo {train.simulated ? '· Simulado (1D6)' : '· Sesión Voluntaria'}
-            </span>
-            <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider block">
-              Jornada {feedback.matchday}
-            </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Efecto en Tabla</p>
+            <p className="font-black text-[11px] leading-tight text-white truncate">
+              {feedback.isChampions ? (
+                <span className="text-blue-300">{feedback.phaseLabel || 'Fase Europea'}</span>
+              ) : posDiff > 0 ? (
+                <span className="text-emerald-400">▲ +{posDiff} ({posBefore}º➔{posAfter}º)</span>
+              ) : posDiff < 0 ? (
+                <span className="text-rose-400">▼ -{Math.abs(posDiff)} ({posBefore}º➔{posAfter}º)</span>
+              ) : (
+                <span className="text-sky-300">= Mantiene {posAfter ?? posBefore}º</span>
+              )}
+            </p>
           </div>
         </div>
 
-        {/* Badge de Recompensa / Estado del entrenamiento y botón Ocultar */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="font-black uppercase text-[9px] px-2.5 py-1 rounded-xl bg-black/40 border border-white/10 shadow-inner">
-            {isSuccess ? (
-              <span className="text-emerald-300 font-black flex items-center gap-1">
-                <Zap size={11} className="text-amber-400" /> +{train.peGained} PE
-              </span>
-            ) : isInjury ? (
-              <span className="text-red-400 font-black">-1 {train.statLost || 'Stat'}</span>
-            ) : isProtected ? (
-              <span className="text-blue-300 font-black flex items-center gap-1">
-                <ShieldCheck size={11} /> Protegido
-              </span>
-            ) : (
-              <span className="text-slate-400 font-bold">Sin Incidencias</span>
-            )}
+        {/* Columna B: Estado del Objetivo Directivo */}
+        <div className="bg-black/40 rounded-xl p-2 border border-white/5 flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-slate-800/80 border border-white/10 shrink-0">
+            <Target className="w-3.5 h-3.5 text-amber-400" />
           </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Objetivo Temporada</p>
+            <p className="font-black text-[11px] leading-tight text-slate-200 truncate">
+              {feedback.isChampions ? (
+                <span className="text-amber-300">Gloria Continental</span>
+              ) : (
+                <span>{boardStatus.label}</span>
+              )}
+            </p>
+          </div>
+        </div>
 
-          {onDismiss && (
-            <button
-              onClick={onDismiss}
-              title="Ocultar informe de entrenamiento"
-              className="text-[8px] font-bold uppercase tracking-wider text-slate-400 hover:text-white px-2 py-1 rounded-xl bg-slate-800/60 hover:bg-slate-800 border border-white/10 transition-all flex items-center gap-1 active:scale-95 cursor-pointer"
-            >
-              <X size={11} /> Ocultar
-            </button>
-          )}
+        {/* Columna C: Balance de PE y Reputación */}
+        <div className="bg-black/40 rounded-xl p-2 border border-white/5 flex items-center gap-2.5">
+          <div className="p-1.5 rounded-lg bg-slate-800/80 border border-white/10 shrink-0">
+            <Award className="w-3.5 h-3.5 text-amber-400" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Balance Obtenido</p>
+            <p className="font-black text-[11px] leading-tight flex items-center gap-1.5 truncate">
+              <span className="text-amber-300">+{peGained} PE</span>
+              <span className="text-slate-500">·</span>
+              <span className={repGained > 0 ? 'text-emerald-400' : repGained < 0 ? 'text-rose-400' : 'text-slate-300'}>
+                {repGained > 0 ? `+${repGained}` : `${repGained}`} Rep
+              </span>
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Contenido detallado del resultado del entrenamiento */}
-      <div className="mt-2.5 bg-black/30 rounded-2xl p-2.5 border border-white/5 flex items-center justify-between gap-3 text-[9px]">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1 rounded-lg bg-black/50 text-slate-300 border border-white/10 shrink-0 flex items-center justify-center font-black text-[10px] tabular-nums w-6 h-6">
-            {train.die || '—'}
-          </div>
-          <p className="text-slate-200 font-bold leading-tight truncate">
-            {train.message || (
-              isSuccess
-                ? `¡Sesión completada con éxito! Has obtenido +${train.peGained} PE para el club.`
-                : isInjury
-                ? `¡Sobrecarga muscular! Baja temporal de -1 ${train.statLost || 'Stat'} para el partido. Alta médica disponible tras el encuentro.`
-                : isProtected
-                ? '¡La Inmunidad Médica activa evitó cualquier percance físico durante la sesión!'
-                : 'Sesión de mantenimiento regular sin PE adicionales ni lesiones.'
-            )}
+      {/* 3. Diagnóstico Breve del Mánager (Una sola línea sobria) */}
+      {feedback.summary && (
+        <div className="px-1">
+          <p className="text-[10.5px] font-medium text-slate-300 leading-snug line-clamp-2">
+            💬 {feedback.summary}
           </p>
         </div>
-      </div>
+      )}
     </motion.div>
   );
 };
-
-export default SimulationFeedbackBanner;

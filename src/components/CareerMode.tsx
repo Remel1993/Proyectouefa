@@ -11,7 +11,7 @@ import {
 import {
   TIERS, CLASS_INFO, classOf, tierCaps, tacticalOptions, sameDist, peCostFor,
   repBand, objectiveFor, expectedPosition, readPerformance, seasonObjectives,
-  isSquadMaxed, careerSpells, CONTRACT_SEASONS, CL_SPOTS, signingRepBonus,
+  isSquadMaxed, careerSpells, CONTRACT_SEASONS, CL_SPOTS, getClSpots, signingRepBonus,
   generateRumors, getRejectionReason, getMarketVacancies, SPECIAL_OFFICE_WEEKS,
   getSpecialOfficeWeeks, calculateCurrentSeasonWeek, getContractObjectivesForTeam,
   calculateBoardConfidence, clPhaseLabel, getChampionsScheduledWeeks
@@ -122,10 +122,11 @@ const buildNews = ({
       tag: 'Champions',
       text: `${teamName} está en la Champions global${clPhaseLabel ? ` (${clPhaseLabel})` : ''}: Europa marca la temporada.`
     });
-  } else if (division === 1 && position && position <= CL_SPOTS + 2) {
+  } else if (division === 1 && position && position <= getClSpots(career?.compId) + 2) {
+    const clQuota = getClSpots(career?.compId);
     items.push({
       tag: 'Champions',
-      text: `La pelea por las ${CL_SPOTS} plazas de Champions está viva: ${teamName} marcha ${position}º de ${standingsSize || 20}.`
+      text: `La pelea por las ${clQuota} plazas de Champions está viva: ${teamName} marcha ${position}º de ${standingsSize || 20}.`
     });
   }
 
@@ -497,9 +498,9 @@ export const CareerView = ({
           const hasVuelta = bMatch.sh2 !== null && bMatch.sh2 !== undefined;
           const isVuelta = (entry.competitionLabel || '').includes('Vuelta') || hasVuelta;
 
-          // Totales de goles hId (ida local) y aId (vuelta local)
-          const totHId = (bMatch.sh || 0) + (bMatch.sa2 || 0);
-          const totAId = (bMatch.sa || 0) + (bMatch.sh2 || 0);
+          // Totales de goles bMatch.hId (ida local, vuelta visitante) y bMatch.aId (ida visitante, vuelta local)
+          const totHId = (bMatch.sh || 0) + (bMatch.sh2 || 0);
+          const totAId = (bMatch.sa || 0) + (bMatch.sa2 || 0);
 
           // Alinear el resultado global de cara al escudo mostrado a la izquierda y derecha en este partido
           const globalLeft = isVuelta ? totAId : totHId;
@@ -511,11 +512,18 @@ export const CareerView = ({
             if (totHId > totAId) winnerId = bMatch.hId;
             else if (totAId > totHId) winnerId = bMatch.aId;
             else if (bMatch.penH !== null && bMatch.penH !== undefined) {
-              winnerId = bMatch.penH > bMatch.penA ? bMatch.aId : bMatch.hId;
+              winnerId = (bMatch.penH || 0) > (bMatch.penA || 0) ? bMatch.hId : bMatch.aId;
             }
             if (winnerId !== null) {
               qualified = winnerId === careerClTeam.id;
             }
+          }
+
+          let penaltiesText = null;
+          if (hasVuelta && bMatch.penH !== null && bMatch.penH !== undefined && bMatch.penA !== null && bMatch.penA !== undefined) {
+            const penLeft = isVuelta ? bMatch.penA : bMatch.penH;
+            const penRight = isVuelta ? bMatch.penH : bMatch.penA;
+            penaltiesText = `(${penLeft}-${penRight} pen.)`;
           }
 
           aggregateInfo = {
@@ -524,7 +532,7 @@ export const CareerView = ({
             leg1Score: `${bMatch.sh} - ${bMatch.sa}`,
             leg2Score: hasVuelta ? `${bMatch.sh2} - ${bMatch.sa2}` : null,
             globalScoreText: hasVuelta ? `${globalLeft} - ${globalRight}` : `${bMatch.sh} - ${bMatch.sa}`,
-            penaltiesText: (bMatch.penH !== null && bMatch.penH !== undefined) ? `(${bMatch.penH}-${bMatch.penA} pen.)` : null,
+            penaltiesText,
             qualified
           };
         }
@@ -635,7 +643,7 @@ export const CareerView = ({
           const rivalTeam = isHome ? at : ht;
           const res = myScore > rivalScore ? 'W' : myScore === rivalScore ? 'D' : 'L';
           userClHistoryMatches.push({
-            dayLabel: h.day,
+            dayLabel: typeof h.day === 'number' ? `Jornada ${h.day}` : String(h.day ?? ''),
             isHome,
             myScore,
             rivalScore,
@@ -1270,21 +1278,16 @@ export const CareerView = ({
                           </span>
                         )}
                       </div>
-                      {lastPlayedMatchOverall.aggregateInfo.qualified !== null && (
-                        <span className={`px-2.5 py-1 rounded-full font-black uppercase tracking-wider text-[8px] ${
-                          lastPlayedMatchOverall.aggregateInfo.qualified
-                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                            : 'bg-red-500/20 text-red-300 border border-red-500/30'
-                        }`}>
-                          {lastPlayedMatchOverall.aggregateInfo.qualified ? '✅ ¡Clasificado a siguiente ronda!' : '❌ Eliminado en esta ronda'}
-                        </span>
-                      )}
                     </div>
                   )}
 
                   <div className='flex items-center justify-between text-[8px] font-bold text-slate-400 px-1'>
-                    <span>Balance: +{lastPlayedMatchOverall.pe || 0} PE ganados</span>
-                    <span className='text-amber-400 font-black'>+{lastPlayedMatchOverall.rep || 0} Reputación</span>
+                    <span className='flex items-center gap-1'>
+                      Balance: <strong className={(lastPlayedMatchOverall.pe || 0) > 0 ? 'text-emerald-400 font-black' : 'text-slate-400 font-bold'}>+{(lastPlayedMatchOverall.pe || 0)} PE ganados</strong>
+                    </span>
+                    <span className={(lastPlayedMatchOverall.rep || 0) > 0 ? 'text-emerald-400 font-black' : (lastPlayedMatchOverall.rep || 0) < 0 ? 'text-rose-400 font-black' : 'text-slate-400 font-bold'}>
+                      {(lastPlayedMatchOverall.rep || 0) > 0 ? `+${lastPlayedMatchOverall.rep}` : (lastPlayedMatchOverall.rep || 0)} Reputación
+                    </span>
                   </div>
                 </div>
               )}
@@ -1400,8 +1403,8 @@ export const CareerView = ({
                       </button>
                     )}
 
-                    {/* Botón para iniciar nueva temporada global si Champions y Ligas están listas, o tras finalizar la Champions */}
-                    {(championsFinished || allLeaguesFinished) && onNewSeason && (
+                    {/* Botón para iniciar nueva temporada global cuando Champions League ha finalizado */}
+                    {championsFinished && onNewSeason && (
                       <button
                         onClick={onNewSeason}
                         className='w-full bg-amber-500 hover:bg-amber-400 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 border border-amber-300/60'
@@ -2361,7 +2364,9 @@ export const CareerView = ({
 
                               {item.played && (
                                 <div className='pt-1.5 border-t border-white/5 flex items-center justify-between text-[8px] font-bold'>
-                                  <span className='text-amber-300'>+{item.repEarned || 0} Rep</span>
+                                  <span className={(item.repEarned || 0) > 0 ? 'text-emerald-400 font-black' : (item.repEarned || 0) < 0 ? 'text-rose-400 font-black' : 'text-slate-400 font-bold'}>
+                                    {(item.repEarned || 0) > 0 ? `+${item.repEarned}` : (item.repEarned || 0)} Rep
+                                  </span>
                                   <span className='text-emerald-300'>+{item.peEarned || 0} PE</span>
                                 </div>
                               )}
@@ -3338,8 +3343,12 @@ export const CareerMatchView = ({ matchState, rolling, onRoll, onFinish, ui }) =
           }`}>
             {isChampions ? '⭐ UEFA Champions League' : 'En Directo'}
           </div>
-          <span className='text-[8px] font-black uppercase italic text-slate-300 tracking-wider'>
-            {isChampions ? (matchState.championsPhase ? clPhaseLabel(matchState.championsPhase) : 'Noche Europea') : 'Jornada de Liga'}
+          <span className='text-[8px] font-black uppercase italic text-slate-300 tracking-wider flex items-center gap-1.5'>
+            {isChampions
+              ? `${matchState.championsPhase ? clPhaseLabel(matchState.championsPhase) : 'Noche Europea'}${
+                  matchState.isVuelta ? ' · Partido de Vuelta' : matchState.championsPhase === 'Final' ? ' · Gran Final' : ' · Partido de Ida'
+                }`
+              : 'Jornada de Liga'}
           </span>
         </div>
         <div className='w-10' />
@@ -3358,7 +3367,17 @@ export const CareerMatchView = ({ matchState, rolling, onRoll, onFinish, ui }) =
             <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{matchState.home.att + '/' + matchState.home.opp + '/' + matchState.home.def}</p>
           </div>
 
-          <div className='px-4 flex flex-col items-center shrink-0 w-32'>
+          <div className='px-4 flex flex-col items-center shrink-0 min-w-[140px]'>
+            {matchState.aggregate && (
+              <div className='mb-2 bg-gradient-to-r from-blue-600/50 via-indigo-600/60 to-blue-600/50 border border-blue-400/50 px-3 py-1 rounded-full flex flex-col items-center shadow-lg'>
+                <span className='text-[9px] font-black uppercase italic text-amber-300 tracking-wider whitespace-nowrap'>
+                  Global: {matchState.aggregate.sh + matchState.scoreH} - {matchState.aggregate.sa + matchState.scoreA}
+                </span>
+                <span className='text-[7px] text-blue-200 font-bold tracking-tight'>
+                  (Ida: {matchState.aggregate.sh} - {matchState.aggregate.sa})
+                </span>
+              </div>
+            )}
             <div className='text-5xl font-black italic tracking-tighter flex gap-3 tabular-nums drop-shadow-[0_0_15px_rgba(0,0,0,0.8)] text-white'>
               <span>{matchState.scoreH}</span>
               <span className='text-slate-400'>-</span>
