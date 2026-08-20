@@ -66,8 +66,8 @@ const strengthOf = t => (t?.att || 0) + (t?.opp || 0) + (t?.def || 0);
 /* Rumores y titulares del mundo del fútbol */
 const buildNews = ({
   managerName, teamName, rivalName, position, expected, reputation, log, tier,
-  seasonsLeft, maxed, clQualified, clPhaseLabel, division, standingsSize
-}) => {
+  seasonsLeft, maxed, clQualified, clPhaseLabel, division, standingsSize, compId, career
+}: any = {}) => {
   const items = [];
   const last = log?.[0];
   if (last) {
@@ -123,8 +123,8 @@ const buildNews = ({
       tag: 'Champions',
       text: `${teamName} está en la Champions global${clPhaseLabel ? ` (${clPhaseLabel})` : ''}: Europa marca la temporada.`
     });
-  } else if (division === 1 && position && position <= getClSpots(career?.compId) + 2) {
-    const clQuota = getClSpots(career?.compId);
+  } else if (division === 1 && position && position <= getClSpots(compId || career?.compId) + 2) {
+    const clQuota = getClSpots(compId || career?.compId);
     items.push({
       tag: 'Champions',
       text: `La pelea por las ${clQuota} plazas de Champions está viva: ${teamName} marcha ${position}º de ${standingsSize || 20}.`
@@ -931,9 +931,10 @@ export const CareerView = ({
       managerName: career.manager, teamName: team?.name, rivalName: rival?.name,
       position, expected, reputation: career.reputation, log: career.seasonLog, tier,
       seasonsLeft, maxed, clQualified: !!cl, clPhaseLabel: cl?.phaseLabel,
-      division: career.div, standingsSize: standings?.length
+      division: career.div, standingsSize: standings?.length,
+      compId: career.compId, career
     }),
-    [career.manager, team?.name, rival?.name, position, expected, career.reputation, career.seasonLog, tier, seasonsLeft, maxed, cl, career.div, standings?.length]
+    [career.manager, team?.name, rival?.name, position, expected, career.reputation, career.seasonLog, tier, seasonsLeft, maxed, cl, career.div, standings?.length, career.compId, career]
   );
 
   const spells = useMemo(() => careerSpells(career.seasonHistory || []), [career.seasonHistory]);
@@ -1368,7 +1369,7 @@ export const CareerView = ({
                           onClick={onSimulateGlobalMatchday || onSimulateWorld}
                           className='w-full bg-slate-800/50 hover:bg-slate-700/60 backdrop-blur-md text-slate-200 py-3 rounded-xl text-[9px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10'
                         >
-                          <Dices size={14} className='text-slate-300' /> Simular Jornada Global {currentGlobalMd}
+                          <Dices size={14} className='text-slate-300' /> Simular Semana Global {currentGlobalMd}
                         </button>
                         <button
                           onClick={onSimulateAllRemainingLeagues}
@@ -1683,7 +1684,7 @@ export const CareerView = ({
                       onClick={onSimulateMatch}
                       className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30'
                     >
-                      <FastForward size={15} /> Simular Jornada
+                      <FastForward size={15} /> Simular Semana
                     </button>
                   </div>
                 </Panel>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export type CompetitionId = 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L6' | 'L7' | 'C1' | 'C2' | 'C3' | string;
+export type CompetitionId = 'L1' | 'L2' | 'L3' | 'L4' | 'L5' | 'L6' | 'L7' | 'L8' | 'C1' | 'C2' | 'C3' | string;
 
 interface CompetitionLogoProps {
   compId: CompetitionId;
@@ -19,6 +19,7 @@ const LOGO_PATHS: Record<string, string[]> = {
   'L5': ['/logos/eredivisie.png', '/logos/eredivisie.svg', '/logos/eredivisie.webp', '/logos/eredivisie.jpg', '/logos/L5.png', '/logos/liga_holandesa.png'],
   'L6': ['/logos/ligue1.png', '/logos/ligue1.svg', '/logos/ligue1.webp', '/logos/ligue1.jpg', '/logos/L6.png', '/logos/ligue_1.png', '/logos/liga_francesa.png'],
   'L7': ['/logos/uefa.png', '/logos/uefa.svg', '/logos/uefa.webp', '/logos/uefa.jpg', '/logos/L7.png', '/logos/miscelanea.png'],
+  'L8': ['/logos/uefa.png', '/logos/uefa.svg', '/logos/uefa.webp', '/logos/uefa.jpg', '/logos/L8.png', '/logos/miscelanea_b.png'],
   'C1': ['/logos/champions.png', '/logos/champions.svg', '/logos/champions.webp', '/logos/champions.jpg', '/logos/C1.png', '/logos/champions_league.png', '/logos/ucl.png'],
   'C2': ['/logos/fifa.png', '/logos/fifa.svg', '/logos/fifa.webp', '/logos/fifa.jpg', '/logos/C2.png', '/logos/worldcup.png', '/logos/copa_del_mundo.png', '/logos/mundial.png'],
   'C3': ['/logos/europaleague.png', '/logos/europa_league.png', '/logos/uel.png', '/logos/C3.png', '/logos/europa.png', '/logos/uefa_europa_league.png'],
@@ -176,6 +177,7 @@ const FallbackLogo: React.FC<{ compId: CompetitionId; size?: number }> = ({ comp
     case 'L5': return <EredivisieLogo size={size} />;
     case 'L6': return <Ligue1Logo size={size} />;
     case 'L7': return <UefaLogo size={size} />;
+    case 'L8': return <UefaLogo size={size} />;
     case 'C1': return <ChampionsLeagueLogo size={size} />;
     case 'C2': return <FifaLogo size={size} />;
     case 'C3': return <EuropaLeagueLogo size={size} />;
