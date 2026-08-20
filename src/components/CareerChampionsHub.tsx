@@ -12,12 +12,15 @@ interface CareerChampionsHubProps {
   onPlayChampionsMatch: () => void;
   onSimulateChampionsMatch: () => void;
   onSimulateAllChampions?: () => void;
+  onDrawChampions?: (forceRegen?: boolean) => void;
+  onPerformKnockoutDraw?: () => void;
   onOpenNewSeason?: () => void;
   onBackToCareer?: () => void;
   onOpenDrill?: () => void;
   onOpenTraining?: () => void;
   onSetTactic?: (tactic: any) => void;
   isChampionsDate?: boolean;
+  isDrawWeek?: boolean;
   currentWeek?: number;
   nextClWeek?: number | null;
   ui: any;
@@ -31,12 +34,15 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
   onPlayChampionsMatch,
   onSimulateChampionsMatch,
   onSimulateAllChampions,
+  onDrawChampions,
+  onPerformKnockoutDraw,
   onOpenNewSeason,
   onBackToCareer,
   onOpenDrill,
   onOpenTraining,
   onSetTactic,
   isChampionsDate = true,
+  isDrawWeek = false,
   currentWeek = 1,
   nextClWeek,
   ui
@@ -823,8 +829,62 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                   </div>
                 </div>
 
-                {/* Panel Informativo cuando no es fecha de Champions League */}
-                {!isChampionsDate ? (
+                {/* Panel durante semana de sorteo UEFA */}
+                {isDrawWeek ? (
+                  <div className='space-y-3 pt-1'>
+                    <div className='p-3.5 bg-gradient-to-r from-indigo-950/70 via-blue-900/60 to-purple-950/70 border border-blue-400/40 rounded-2xl space-y-2 text-left shadow-lg'>
+                      <div className='flex items-center gap-2'>
+                        <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1'>
+                          <Sparkles size={10} /> Semana Oficial de Sorteo UEFA · Semana {currentWeek}
+                        </span>
+                      </div>
+                      <p className='text-[10px] font-medium text-slate-200 leading-relaxed'>
+                        {currentWeek === 2
+                          ? 'Sorteo oficial de la Fase de Grupos de la UEFA Champions League. Define la conformación de los 8 grupos y los rivales continentales de la temporada.'
+                          : 'Sorteo oficial de Eliminatorias Directas (Octavos de Final). Define los cruces de ida y vuelta para el camino hacia la Gran Final.'}
+                      </p>
+                      <button
+                        onClick={() => {
+                          if (currentWeek === 20 && onPerformKnockoutDraw) {
+                            onPerformKnockoutDraw();
+                            setSubTab('bracket');
+                          } else if (onDrawChampions) {
+                            onDrawChampions(true);
+                            setSubTab('groups');
+                          }
+                        }}
+                        className='w-full py-3 mt-1 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-black uppercase italic text-[10px] tracking-widest active:scale-95 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer'
+                      >
+                        <Sparkles size={14} className='text-slate-950' />
+                        <span>{currentWeek === 20 ? 'Sortear Cuadro de Octavos' : 'Sortear Grupos UEFA'}</span>
+                      </button>
+                    </div>
+
+                    <div className='grid grid-cols-3 gap-2'>
+                      <button
+                        onClick={() => setSubTab('groups')}
+                        className='py-3 font-black uppercase italic text-[9px] tracking-wider rounded-2xl bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-400/30 active:scale-95 transition-all flex items-center justify-center gap-1'
+                      >
+                        <BarChart3 size={12} className='text-blue-300' />
+                        <span>Grupos</span>
+                      </button>
+                      <button
+                        onClick={() => setSubTab('bracket')}
+                        className='py-3 font-black uppercase italic text-[9px] tracking-wider rounded-2xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 border border-purple-400/30 active:scale-95 transition-all flex items-center justify-center gap-1'
+                      >
+                        <Swords size={12} className='text-purple-300' />
+                        <span>Cuadro</span>
+                      </button>
+                      <button
+                        onClick={() => setSubTab('schedule')}
+                        className='py-3 font-black uppercase italic text-[9px] tracking-wider rounded-2xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 active:scale-95 transition-all flex items-center justify-center gap-1'
+                      >
+                        <Calendar size={12} className='text-slate-300' />
+                        <span>Calendario</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : !isChampionsDate ? (
                   <div className='space-y-3 pt-1'>
                     <div className='p-3.5 bg-gradient-to-r from-blue-950/50 via-slate-900/80 to-blue-950/40 border border-blue-500/30 rounded-2xl space-y-2 text-left'>
                       <div className='flex items-center gap-2'>

@@ -17,7 +17,8 @@ import {
   calculateBoardConfidence, clPhaseLabel, getChampionsScheduledWeeks
 } from '../lib/career';
 import {
-  isChampionsWeek, isEuropaLeagueWeek, getNextChampionsWeek, getNextEuropaLeagueWeek
+  isChampionsWeek, isEuropaLeagueWeek, getNextChampionsWeek, getNextEuropaLeagueWeek,
+  isChampionsDrawWeek, isChampionsMatchWeek
 } from '../lib/seasonCalendar';
 import { TrainingModal } from './TrainingModal';
 import { TrainingDrillModal } from './TrainingDrillModal';
@@ -368,7 +369,8 @@ export const CareerView = ({
   onApplyTrainingStats, onApplyDrillResult, onAcceptOffer, onRejectOffer, onSubmitApplication,
   onAdvanceOfficeWeek, onDecideLaterAppOffer, onRejectAppResolution, onDismissAppResolutionModal,
   onDismissSimulationFeedback, allComps, schedule, clComp, onPlayChampionsMatch,
-  onSimulateChampionsMatch, onSimulateAllChampions, onDeleteCareer, onArchiveAndResetCareer,
+  onSimulateChampionsMatch, onSimulateAllChampions, onDrawChampions, onPerformKnockoutDraw,
+  onDeleteCareer, onArchiveAndResetCareer,
   pastCareers = [], onDeletePastCareer, tab: externalTab, onTabChange: onExternalTabChange, ui
 }) => {
   const { Shield, FormBadges, DieIcon } = ui;
@@ -438,12 +440,20 @@ export const CareerView = ({
   }, [clInfo, career.clQualified, clComp, team]);
 
   const clPhaseText = (championsFinished || clComp?.phase === 'Terminado' || clComp?.showWinner)
-    ? null
+    ? 'Finalizada'
     : clComp?.phase === 'Final'
       ? 'FINAL'
-      : clComp?.phase
-        ? 'EN VIVO'
-        : null;
+      : clComp?.phase === 'groups'
+        ? `Grupos (J${Math.min(6, (clComp?.matchday || 0) + 1)})`
+        : clComp?.phase === 'Octavos'
+          ? '1/8 Final'
+          : clComp?.phase === 'Cuartos'
+            ? '1/4 Final'
+            : clComp?.phase === 'Semis'
+              ? 'Semifinal'
+              : clComp?.phase
+                ? 'EN VIVO'
+                : null;
 
   // La Europa League del modo carrera sincronizada con C3
   const isUelQualified = useMemo(() => {
@@ -455,12 +465,20 @@ export const CareerView = ({
   }, [uelInfo, career.uelQualified, uelComp, team]);
 
   const uelPhaseText = (uelComp?.phase === 'Terminado' || uelComp?.showWinner)
-    ? null
+    ? 'Finalizada'
     : uelComp?.phase === 'Final'
       ? 'FINAL'
-      : uelComp?.phase
-        ? 'EN VIVO'
-        : null;
+      : uelComp?.phase === 'Dieciseisavos'
+        ? '1/16 Final'
+        : uelComp?.phase === 'Octavos'
+          ? '1/8 Final'
+          : uelComp?.phase === 'Cuartos'
+            ? '1/4 Final'
+            : uelComp?.phase === 'Semis'
+              ? 'Semifinal'
+              : uelComp?.phase
+                ? 'EN VIVO'
+                : null;
   const season = seasonState?.season || 1;
   const seasonsLeft = Math.max(0, (career.contractStart || season) + (career.contractSeasons || CONTRACT_SEASONS) - season);
   const hasTrainedThisMatchday = career.trainedMatchday === currentMatchday;
@@ -472,8 +490,10 @@ export const CareerView = ({
     return calculateCurrentSeasonWeek(currentMatchday, career.completedOfficeWeeks || [], totalRoundsCount);
   }, [currentMatchday, career.completedOfficeWeeks, totalRoundsCount]);
 
-  const careerCurrentWeek = seasonState?.currentWeek || currentWeekInfo?.currentWeek || 1;
-  const isChampionsDate = isChampionsWeek(careerCurrentWeek) || allLeaguesFinished || championsFinished || clComp?.phase === 'Terminado' || clComp?.showWinner;
+  const careerCurrentWeek = seasonState?.currentWeek || currentWeekInfo?.week || 1;
+  const isClDrawWeek = isChampionsDrawWeek(careerCurrentWeek);
+  const isClMatchWeek = isChampionsMatchWeek(careerCurrentWeek);
+  const isChampionsDate = isClDrawWeek || isClMatchWeek || allLeaguesFinished || championsFinished || clComp?.phase === 'Terminado' || clComp?.showWinner;
   const nextClWeek = getNextChampionsWeek(careerCurrentWeek);
   const isEuropaDate = isEuropaLeagueWeek(careerCurrentWeek) || allLeaguesFinished || uelComp?.phase === 'Terminado' || uelComp?.showWinner;
   const nextUelWeek = getNextEuropaLeagueWeek(careerCurrentWeek);
@@ -1194,7 +1214,7 @@ export const CareerView = ({
             onClick={() => setTab('uel')}
             icon={<Flame size={15} className={isEuropaDate ? 'text-amber-500' : 'text-slate-500'} />}
             label='Europa League'
-            badge={!isEuropaDate ? `Sem. ${nextUelWeek || 7}` : uelPhaseText}
+            badge={!isEuropaDate ? `Sem. ${nextUelWeek || 20}` : uelPhaseText}
           />
         )}
         <TabButton active={tab === 'table'} onClick={() => setTab('table')} icon={<BarChart3 size={15} />} label='Tabla' />
@@ -1391,8 +1411,28 @@ export const CareerView = ({
                   )}
 
                   <div className='space-y-2 pt-1'>
+                    {/* Botón de Sorteo de Champions League en Semana de Sorteo (Semana 2 o 20) */}
+                    {isClDrawWeek && !championsFinished && (
+                      <button
+                        onClick={() => {
+                          if (careerCurrentWeek === 20 && onPerformKnockoutDraw) {
+                            onPerformKnockoutDraw();
+                          } else if (onDrawChampions) {
+                            onDrawChampions(true);
+                          }
+                          setTab('cl');
+                        }}
+                        className='w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-500 text-white py-4 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all shadow-xl flex items-center justify-center gap-2 border border-blue-400/50 cursor-pointer animate-pulse'
+                      >
+                        <Sparkles size={16} className='text-amber-300' />
+                        <span>
+                          {careerCurrentWeek === 2 ? '⭐ Sorteo Fase de Grupos UEFA' : '⭐ Sorteo Octavos de Final UEFA'} · Realizar Sorteo (Semana {careerCurrentWeek})
+                        </span>
+                      </button>
+                    )}
+
                     {/* Botón directo de Champions League cuando el equipo está clasificado o en disputa */}
-                    {isClQualified && !championsFinished && (
+                    {isClQualified && !championsFinished && !isClDrawWeek && (
                       <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
                         <button
                           onClick={() => {
@@ -1431,7 +1471,7 @@ export const CareerView = ({
                     )}
 
                     {/* Si no está clasificado a Champions pero la Champions europea sigue pendiente */}
-                    {!isClQualified && !championsFinished && onSimulateAllChampions && (
+                    {!isClQualified && !championsFinished && !isClDrawWeek && onSimulateAllChampions && (
                       <button
                         onClick={isChampionsDate ? onSimulateAllChampions : undefined}
                         disabled={!isChampionsDate}
@@ -2486,12 +2526,15 @@ export const CareerView = ({
               onPlayChampionsMatch={onPlayChampionsMatch || onOpenChampions}
               onSimulateChampionsMatch={onSimulateChampionsMatch}
               onSimulateAllChampions={onSimulateAllChampions}
+              onDrawChampions={onDrawChampions}
+              onPerformKnockoutDraw={onPerformKnockoutDraw}
               onOpenNewSeason={onNewSeason}
               onBackToCareer={() => setTab('main')}
               onOpenDrill={() => setShowDrillModal(true)}
               onOpenTraining={() => setShowTrainingModal(true)}
               onSetTactic={onSetTactic}
               isChampionsDate={isChampionsDate}
+              isDrawWeek={isClDrawWeek}
               currentWeek={careerCurrentWeek}
               nextClWeek={nextClWeek}
               ui={ui}

@@ -258,10 +258,10 @@ export const SimulationFeedbackBanner: React.FC<SimulationFeedbackBannerProps> =
         </div>
       </div>
 
-      {/* 3. Diagnóstico Breve del Mánager (Una sola línea sobria) */}
+      {/* 3. Diagnóstico Breve del Mánager (Completo, sin cortes) */}
       {feedback.summary && (
-        <div className="px-1">
-          <p className="text-[10.5px] font-medium text-slate-300 leading-snug line-clamp-2">
+        <div className="bg-black/30 rounded-xl p-2.5 border border-white/5">
+          <p className="text-[11px] font-medium text-slate-200 leading-relaxed whitespace-pre-line">
             💬 {feedback.summary}
           </p>
         </div>
