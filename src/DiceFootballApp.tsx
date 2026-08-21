@@ -142,21 +142,13 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
     { id: 'L8', country: 'Miscelánea B', code: 'MB' }
   ];
 
-  // 1. Recolectar nombres de equipos que ya están en Champions League (C1) para evitar duplicados
-  const clTeamsSet = new Set<string>();
-  if (compsState?.['C1']?.teams && Array.isArray(compsState['C1'].teams)) {
-    compsState['C1'].teams.forEach((t: any) => {
-      if (t?.name) clTeamsSet.add(t.name);
-    });
-  }
-
   const leagueTeamsByRank: Record<string, Record<number, any>> = {};
 
   leagueConfigs.forEach(cfg => {
     const comp = compsState?.[cfg.id];
     let sourceTeams: any[] = [];
     
-    // Si la liga ha terminado: clasificación final real
+    // Prioridad 1: Si la liga ha terminado en la temporada actual, usar la tabla final real
     if (isLeagueFinished(comp)) {
       sourceTeams = [...comp.teams].sort((a: any, b: any) => 
         (b.pts || 0) - (a.pts || 0) || 
@@ -164,47 +156,45 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
         (b.gf || 0) - (a.gf || 0)
       );
     } else if (Array.isArray(comp?.previousStandings) && comp.previousStandings.length >= 6) {
+      // Prioridad 2: Si la nueva temporada está en juego, usar la clasificación oficial de la última temporada finalizada
       sourceTeams = [...comp.previousStandings];
     } else if (Array.isArray(comp?.teams) && comp.teams.length >= 6) {
-      const hasPlayed = comp.teams.some((t: any) => (t.p || 0) > 0 || (t.pts || 0) > 0) || (comp.matchday || 0) > 0;
-      if (hasPlayed) {
-        sourceTeams = [...comp.teams].sort((a: any, b: any) => 
-          (b.pts || 0) - (a.pts || 0) || 
-          ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) ||
-          (b.gf || 0) - (a.gf || 0)
-        );
-      } else {
-        // Al inicio de la temporada (Jornada 0): ordenar por coeficiente deportivo (fuerza de plantilla en la base de datos de la app)
-        sourceTeams = [...comp.teams].sort((a: any, b: any) => {
-          const authA = getAuthenticTeamStats(a);
-          const authB = getAuthenticTeamStats(b);
-          const pA = (authA.att || 1) + (authA.opp || 1) + (authA.def || 1);
-          const pB = (authB.att || 1) + (authB.opp || 1) + (authB.def || 1);
-          return pB - pA;
-        });
-      }
+      // Prioridad 3: Temporada 1 inicial sin historial previo, ordenar canónicamente por plantilla
+      sourceTeams = [...comp.teams].sort((a: any, b: any) => {
+        const authA = getAuthenticTeamStats(a);
+        const authB = getAuthenticTeamStats(b);
+        const pA = (authA.att || 1) + (authA.opp || 1) + (authA.def || 1);
+        const pB = (authB.att || 1) + (authB.opp || 1) + (authB.def || 1);
+        return pB - pA;
+      });
     } else {
       sourceTeams = (PRESETS[cfg.code] || []).map((t, i) => ({ ...t, id: i + 1 }));
     }
 
-    // Filtrar cualquier club que ya esté en Champions League
-    let availableTeams = sourceTeams.filter(t => t && t.name && !clTeamsSet.has(t.name));
-
-    // Si aún no se han poblado equipos explícitos de C1 (ej. primer torneo), los 4 primeros de cada liga van a CL,
-    // por lo que para Europa League tomamos a partir del 5.º puesto:
-    if (clTeamsSet.size === 0 && availableTeams.length >= 6) {
-      availableTeams = availableTeams.slice(4);
+    // Asegurar un pool completo de al menos 7 equipos con presets si fuese necesario
+    if (sourceTeams.length < 7) {
+      const presetPool = (PRESETS[cfg.code] || []).filter(t => !sourceTeams.some(x => x.name === t.name));
+      sourceTeams = [...sourceTeams, ...presetPool];
     }
 
-    // Respaldo de seguridad con presets si faltasen clubes
-    if (availableTeams.length < 2) {
-      const presetPool = (PRESETS[cfg.code] || []).filter(t => !clTeamsSet.has(t.name) && !availableTeams.some(x => x.name === t.name));
-      availableTeams = [...availableTeams, ...presetPool];
-    }
+    // Extracción estricta y determinista de plazas europeas de liga:
+    // Puestos 1, 2, 3, 4 (índices 0..3) van a Champions League (C1)
+    // Puestos 5 y 6 (índices 4 y 5) van a UEFA Europa League (C3)
+    // Puesto 7 (índice 6) sirve como reserva provisional para Octavos de UEL
+    let t5 = sourceTeams[4] || sourceTeams[0];
+    let t6 = sourceTeams[5] || sourceTeams[1];
+    let t7 = sourceTeams[6] || sourceTeams[2];
 
-    const t5 = availableTeams[0] || sourceTeams[4] || sourceTeams[0];
-    const t6 = availableTeams[1] || sourceTeams[5] || sourceTeams[1];
-    const t7 = availableTeams[2] || sourceTeams[6] || sourceTeams[2];
+    // Si el usuario en Modo Carrera clasificó a UEL en esta liga, asegurar su presencia en la 5.ª plaza
+    (forceNames || []).forEach((fn: string) => {
+      if (!fn) return;
+      const foundInComp = sourceTeams.find((t: any) => t.name === fn) || (comp?.teams || []).find((t: any) => t.name === fn);
+      if (foundInComp) {
+        if (t5?.name !== fn && t6?.name !== fn) {
+          t5 = foundInComp;
+        }
+      }
+    });
 
     const wrapTeam = (raw: any, rank: number) => {
       const auth = getAuthenticTeamStats(raw);
@@ -369,43 +359,6 @@ const buildUELKnockout = (compsState: any, forceNames: string[] = []) => {
   };
 };
 
-// MODIFICADO: Genera ambas divisiones para las ligas
-const getDefaultComps = () => {
-  const baseTeam = (preset, isDiv2 = false) => {
-    const list = isDiv2 ? PRESETS_2[preset] : PRESETS[preset];
-    if (!list) return [];
-    const offset = isDiv2 ? 100 : 0; // Previene colisiones de ID
-    return list.map((t, i) => ({ ...t, id: i + 1 + offset, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }));
-  };
-
-  const getLeagueData = (name, code) => {
-    const t2 = baseTeam(code, true);
-    return {
-      type: 'league', name, 
-      teams: baseTeam(code), matchday: 0, history: [], showWinner: false, 
-      teams2: t2, matchday2: 0, history2: [], showWinner2: false,
-      userTeamId: 1, userTeamId2: t2[0]?.id || 21, disqualified: false,
-      promotionsLogs: null,
-      previousStandings: null, previousStandings2: null
-
-    };
-  };
-
-  return {
-    'L1': getLeagueData('Liga Española', 'ES'),
-    'L2': getLeagueData('Liga Italiana', 'IT'),
-    'L3': getLeagueData('Liga Inglesa', 'EN'),
-    'L4': getLeagueData('Liga Alemana', 'DE'),
-    'L5': getLeagueData('Liga Holandesa', 'NL'),
-    'L6': getLeagueData('Liga Francesa', 'FR'),
-    'L7': getLeagueData('Miscelánea', 'MI'),
-    'L8': getLeagueData('Miscelánea B', 'MB'),
-    'C1': { id: 'C1', type: 'cup', name: 'Champions League', teams: [], matchday: 0, history: [], userTeamId: 1, showWinner: false, phase: 'groups', bracket: null, disqualified: false },
-    'C2': { id: 'C2', type: 'cup', name: 'Copa del Mundo', teams: [], matchday: 0, history: [], userTeamId: 1, showWinner: false, phase: 'groups', bracket: null, disqualified: false },
-    'C3': { id: 'C3', type: 'cup', name: 'UEFA Europa League', ...buildUELKnockout({}), disqualified: false }
-  };
-};
-
 // Snapshot independiente de una tabla final (posición, equipo, PJ, PG, PE, PP, GF, GC, DG, Pts)
 const buildStandingsSnapshot = (teams) => {
   if (!Array.isArray(teams) || teams.length === 0) return null;
@@ -523,112 +476,86 @@ const computeLeagueNewSeason = (comp: any) => {
 // - Miscelánea (L7): Top 8 (1º al 8º)
 // Total = 4 + 4 + 4 + 4 + 4 + 4 + 8 = exactamente 32 plazas directas
 const buildCLPool = (compsState: any, forceNames: string[] = []) => {
-  const leagueCodeMap: Record<string, string> = { L1: 'ES', L2: 'IT', L3: 'EN', L4: 'DE', L5: 'NL', L6: 'FR', L7: 'MI', L8: 'MB' };
+  const leagueConfigs = [
+    { id: 'L1', country: 'España', code: 'ES' },
+    { id: 'L3', country: 'Inglaterra', code: 'EN' },
+    { id: 'L2', country: 'Italia', code: 'IT' },
+    { id: 'L4', country: 'Alemania', code: 'DE' },
+    { id: 'L6', country: 'Francia', code: 'FR' },
+    { id: 'L5', country: 'Países Bajos', code: 'NL' },
+    { id: 'L7', country: 'Miscelánea A', code: 'MI' },
+    { id: 'L8', country: 'Miscelánea B', code: 'MB' }
+  ];
 
   const getSource = (compKey: string) => {
     const comp = compsState?.[compKey];
     if (!comp || !Array.isArray(comp.teams) || comp.teams.length === 0) return null;
-    // PRIORIDAD 1: clasificación real de la competición terminada
+    // PRIORIDAD 1: clasificación real de la competición terminada de la misma temporada
     if (isLeagueFinished(comp)) {
       return { origin: 'real', table: buildStandingsSnapshot(comp.teams), teams: comp.teams };
     }
-    // PRIORIDAD 2: previousStandings guardada de temporada anterior
+    // PRIORIDAD 2: previousStandings guardada de temporada anterior terminada
     if (Array.isArray(comp.previousStandings) && comp.previousStandings.length > 0) {
       return { origin: 'previous', table: comp.previousStandings, teams: comp.teams };
     }
-    // PRIORIDAD 3: si aún no se han jugado ligas, tomar la clasificación por defecto/histórica de 1ª División por coeficiente deportivo
+    // PRIORIDAD 3: si aún no se han jugado ligas (Temporada 1 inicial), tomar la clasificación por defecto de 1ª División
     const sim = [...comp.teams].sort((a, b) => {
-      const pA = (a.att || 1) + (a.opp || 1) + (a.def || 1);
-      const pB = (b.att || 1) + (b.opp || 1) + (b.def || 1);
+      const authA = getAuthenticTeamStats(a);
+      const authB = getAuthenticTeamStats(b);
+      const pA = (authA.att || 1) + (authA.opp || 1) + (authA.def || 1);
+      const pB = (authB.att || 1) + (authB.opp || 1) + (authB.def || 1);
       return pB - pA;
     });
     return { origin: 'sim', table: buildStandingsSnapshot(sim.map((t, i) => ({ ...t, pts: 1000 - i }))), teams: comp.teams };
   };
 
-  const pull = (compKey: string, count: number) => {
-    const src = getSource(compKey);
-    if (!src) return [];
-    const defLeague = leagueCodeMap[compKey] || 'EU';
-    // Resolvemos cada fila de la tabla contra el equipo vivo actual
-    const resolve = (row: any) => {
+  const pool: any[] = [];
+  const seen = new Set<string>();
+
+  leagueConfigs.forEach(cfg => {
+    const src = getSource(cfg.id);
+    if (!src) return;
+    const resolve = (row: any, rank: number) => {
       const live = src.teams.find((t: any) => t.id === row.id) || src.teams.find((t: any) => t.name === row.name);
       const base = live || row;
+      const auth = getAuthenticTeamStats(base);
       return {
         ...base,
-        league: base.league || defLeague,
-        clOrigin: src.origin,
+        att: auth.att,
+        opp: auth.opp,
+        def: auth.def,
+        color1: auth.color1 || base.color1,
+        color2: auth.color2 || base.color2,
+        isFlag: base.isFlag ?? false,
+        league: cfg.code,
+        originCountry: cfg.country,
+        clOrigin: `${cfg.country} (${rank}.º puesto)`,
         clProvisional: src.origin === 'sim'
       };
     };
-    const ordered = src.table.map(resolve);
-    return ordered.slice(0, count);
-  };
 
-  // 32 cupos directos estrictos: 8 ligas x 4 puestos
-  let pool = [
-    ...pull('L1', 4), // 🇪🇸 España: 1º al 4º
-    ...pull('L3', 4), // 🏴󠁧󠁢󠁥󠁮󠁧󠁿 Inglaterra: 1º al 4º
-    ...pull('L2', 4), // 🇮🇹 Italia: 1º al 4º
-    ...pull('L4', 4), // 🇩🇪 Alemania: 1º al 4º
-    ...pull('L6', 4), // 🇫🇷 Francia: 1º al 4º
-    ...pull('L5', 4), // 🇳🇱 Países Bajos: 1º al 4º
-    ...pull('L7', 4), // 🇵🇹 Miscelánea: 1º al 4º
-    ...pull('L8', 4), // 🌍 Miscelánea B: 1º al 4º
-  ];
+    let leagueQualified = src.table.map((row: any, idx: number) => resolve(row, idx + 1)).slice(0, 4);
 
-  // Sin duplicados por nombre
-  const seen = new Set();
-  pool = pool.filter(t => { if (!t || seen.has(t.name)) return false; seen.add(t.name); return true; });
-
-  // Respaldo de seguridad solo si alguna liga no tuviera equipos configurados
-  if (pool.length < 32) {
-    const eligible: any[] = [];
-    ['L1','L3','L4','L2','L6','L5','L7','L8'].forEach(k => {
-      const comp = compsState?.[k];
-      if (comp && Array.isArray(comp.teams)) {
-        comp.teams.forEach((t: any) => {
-          if (!seen.has(t.name)) {
-            eligible.push({
-              ...t,
-              league: t.league || leagueCodeMap[k] || 'EU',
-              clOrigin: 'draw',
-              clProvisional: true
-            });
-          }
-        });
-      }
-    });
-    eligible.sort(() => Math.random() - 0.5);
-    while (pool.length < 32 && eligible.length > 0) {
-      const t = eligible.pop();
-      if (!seen.has(t.name)) { seen.add(t.name); pool.push(t); }
-    }
-  }
-
-  pool = pool.slice(0, 32);
-
-  // Plazas garantizadas del modo carrera si clasificó en puestos de Champions
-  (forceNames || []).forEach((name: string) => {
-    if (!name || pool.some(t => t.name === name)) return;
-    let forced: any = null;
-    ['L1','L2','L3','L4','L5','L6','L7','L8'].forEach(k => {
-      const comp = compsState?.[k];
-      if (!forced && comp && Array.isArray(comp.teams)) {
-        const found = comp.teams.find((t: any) => t.name === name);
-        if (found) {
-          forced = {
-            ...found,
-            league: found.league || leagueCodeMap[k] || 'EU',
-            clOrigin: 'career',
-            clProvisional: false
-          };
+    // Si el usuario en modo carrera clasificó con su club en esta liga, asegurar su presencia en los 4 clasificados
+    (forceNames || []).forEach((forcedName: string) => {
+      if (!forcedName) return;
+      const foundInLeague = (src.teams || []).find((t: any) => t.name === forcedName);
+      if (foundInLeague && !leagueQualified.some((t: any) => t.name === forcedName)) {
+        const forcedWrapped = resolve(foundInLeague, 4);
+        if (leagueQualified.length >= 4) {
+          leagueQualified[3] = forcedWrapped;
+        } else {
+          leagueQualified.push(forcedWrapped);
         }
       }
     });
-    if (!forced) return;
-    const weakestIdx = pool.reduce((worst, t, i) =>
-      (t.att + t.opp + t.def) < (pool[worst].att + pool[worst].opp + pool[worst].def) ? i : worst, 0);
-    pool[weakestIdx] = forced;
+
+    leagueQualified.forEach((t: any) => {
+      if (t && t.name && !seen.has(t.name)) {
+        seen.add(t.name);
+        pool.push(t);
+      }
+    });
   });
 
   return pool.slice(0, 32);
@@ -806,6 +733,49 @@ const getAutoFillData = (compId: string, compsState: any, forceNames: string[] =
   let pool = isWC ? buildDynamicWCPool({ randomize: true }) : buildCLPool(compsState, forceNames);
   pool = pool.map((t, i) => ({ ...t, id: i + 1, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }));
   return drawKnockoutGroups(pool, isWC, true);
+};
+
+// Genera el estado inicial completo de todas las ligas y torneos europeos
+const getDefaultComps = () => {
+  const baseTeam = (preset: string, isDiv2 = false) => {
+    const list = isDiv2 ? PRESETS_2[preset] : PRESETS[preset];
+    if (!list) return [];
+    const offset = isDiv2 ? 100 : 0; // Previene colisiones de ID
+    return list.map((t, i) => ({ ...t, id: i + 1 + offset, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }));
+  };
+
+  const getLeagueData = (name: string, code: string) => {
+    const t2 = baseTeam(code, true);
+    return {
+      type: 'league', name, 
+      teams: baseTeam(code), matchday: 0, history: [], showWinner: false, 
+      teams2: t2, matchday2: 0, history2: [], showWinner2: false,
+      userTeamId: 1, userTeamId2: t2[0]?.id || 21, disqualified: false,
+      promotionsLogs: null,
+      previousStandings: null, previousStandings2: null
+    };
+  };
+
+  const leagues: any = {
+    'L1': getLeagueData('Liga Española', 'ES'),
+    'L2': getLeagueData('Liga Italiana', 'IT'),
+    'L3': getLeagueData('Liga Inglesa', 'EN'),
+    'L4': getLeagueData('Liga Alemana', 'DE'),
+    'L5': getLeagueData('Liga Holandesa', 'NL'),
+    'L6': getLeagueData('Liga Francesa', 'FR'),
+    'L7': getLeagueData('Miscelánea', 'MI'),
+    'L8': getLeagueData('Miscelánea B', 'MB')
+  };
+
+  const c1Data = getAutoFillData('C1', leagues);
+  const c3Data = buildUELKnockout(leagues);
+
+  return {
+    ...leagues,
+    'C1': { id: 'C1', type: 'cup', name: 'Champions League', ...c1Data, disqualified: false },
+    'C2': { id: 'C2', type: 'cup', name: 'Copa del Mundo', teams: [], matchday: 0, history: [], userTeamId: 1, showWinner: false, phase: 'groups', bracket: null, disqualified: false },
+    'C3': { id: 'C3', type: 'cup', name: 'UEFA Europa League', ...c3Data, disqualified: false }
+  };
 };
 
 const getShuffleData = (compId: string, compsState: any) => {
@@ -2375,21 +2345,21 @@ const HubView = ({
       )}
 
       {/* PANEL DE CONTROL DE TEMPORADA / CALENDARIO */}
-      <section className='bg-slate-900/60 backdrop-blur-xl rounded-3xl p-4 sm:p-5 border border-white/10 shadow-2xl space-y-3.5'>
-        <div className='flex items-center justify-between gap-3'>
-          <div className='min-w-0'>
-            <div className='flex items-center gap-2 flex-wrap'>
-              <span className='px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[8.5px] font-black uppercase tracking-wider'>
+      <section className='bg-slate-900/60 backdrop-blur-xl rounded-3xl p-3.5 sm:p-5 border border-white/10 shadow-2xl space-y-3 overflow-hidden'>
+        <div className='flex items-center justify-between gap-2.5 min-w-0'>
+          <div className='min-w-0 flex-1'>
+            <div className='flex items-center gap-1.5 flex-wrap'>
+              <span className='px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider'>
                 Temporada {seasonState?.season || 1}
               </span>
-              <span className='px-2 py-0.5 rounded-md bg-blue-500/20 border border-blue-400/30 text-blue-300 text-[8.5px] font-black uppercase tracking-wider'>
+              <span className='px-2 py-0.5 rounded-md bg-blue-500/20 border border-blue-400/30 text-blue-300 text-[8px] sm:text-[8.5px] font-black uppercase tracking-wider'>
                 Semana {Math.min(42, currentWeek)} / 42
               </span>
-              <span className='text-[8.5px] font-bold text-slate-400 uppercase tracking-wider'>
+              <span className='text-[8px] sm:text-[8.5px] font-bold text-slate-400 uppercase tracking-wider'>
                 {weekData?.mes || 'Agosto'}
               </span>
             </div>
-            <h2 className='text-lg font-black uppercase italic text-white tracking-tight mt-1 truncate'>
+            <h2 className='text-base sm:text-lg font-black uppercase italic text-white tracking-tight mt-1 truncate'>
               {currentWeek > 42 || (allLeaguesFinished && championsFinished)
                 ? 'Temporada Completada'
                 : playableFixtures.length === 0
@@ -2401,22 +2371,24 @@ const HubView = ({
           <button
             onClick={onOpenSeasonCalendar}
             title="Abrir Calendario Oficial de 42 Semanas"
-            className='w-11 h-11 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/10 hover:border-emerald-400/50 flex items-center justify-center text-emerald-400 hover:text-emerald-300 shrink-0 shadow-inner active:scale-95 transition-all group'
+            className='w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-white/5 hover:bg-white/15 border border-white/10 hover:border-emerald-400/50 flex items-center justify-center text-emerald-400 hover:text-emerald-300 shrink-0 shadow-inner active:scale-95 transition-all group'
           >
-            <Calendar size={20} className='group-hover:scale-110 transition-transform' />
+            <Calendar size={18} className='group-hover:scale-110 transition-transform' />
           </button>
         </div>
 
-        {/* BOTÓN PRINCIPAL DE ACCIÓN: SIMULAR SEMANA SITUADO ARRIBA PARA POSICIÓN VERTICAL FIJA Y ESTABLE */}
+        {/* BOTÓN PRINCIPAL DE ACCIÓN: SIMULAR SEMANA */}
         {currentWeek <= 42 && !((allLeaguesFinished && championsFinished) || (currentWeek >= 42 && allLeaguesFinished)) ? (
           <div className='space-y-2 pt-0.5'>
             <button
               onClick={onSimulateWeek || onSimulateAll}
-              className='w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-md cursor-pointer'
+              className='w-full py-3 px-3 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-[10px] sm:text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-md cursor-pointer'
             >
-              <Dices size={17} className='text-slate-950 stroke-[2.5]' />
-              <span>
-                Simular Semana {currentWeek} {playableFixtures.length > 0 ? `(${playableFixtures.length} fixture${playableFixtures.length > 1 ? 's' : ''})` : '(Resolver Hito)'}
+              <Dices size={16} className='text-slate-950 stroke-[2.5] shrink-0' />
+              <span className='truncate'>
+                Simular Semana {currentWeek} {playableFixtures.length > 0 
+                  ? `(${playableFixtures.map(f => f.competicion === 'LIGA' ? 'Liga' : f.competicion === 'CHAMPIONS' ? 'Champions' : f.competicion === 'EUROPA_LEAGUE' ? 'Europa' : f.ronda).join(' + ')})` 
+                  : milestones.length > 0 ? `(${milestones[0].ronda})` : '(Continuar)'}
               </span>
             </button>
 
@@ -2424,71 +2396,84 @@ const HubView = ({
             {onSimulateUntilNextMatch && (
               <button
                 onClick={onSimulateUntilNextMatch}
-                className='w-full py-2.5 px-3 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white rounded-xl text-[9.5px] font-bold uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
+                className='w-full py-2.5 px-3 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white rounded-xl text-[9px] sm:text-[9.5px] font-bold uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
               >
-                <FastForward size={13} className='text-amber-400' />
-                <span>Simular hasta mi próximo partido</span>
+                <FastForward size={13} className='text-amber-400 shrink-0' />
+                <span className='truncate'>Simular hasta mi próximo partido</span>
               </button>
             )}
           </div>
         ) : (
           <button
             onClick={onNewSeason}
-            className='w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-xl cursor-pointer'
+            className='w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 rounded-2xl text-[10.5px] sm:text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-xl cursor-pointer'
           >
-            <RotateCcw size={16} className='text-slate-950 stroke-[2.5]' />
-            <span>Iniciar Temporada {seasonState?.season ? seasonState.season + 1 : 2}</span>
+            <RotateCcw size={16} className='text-slate-950 stroke-[2.5] shrink-0' />
+            <span className='truncate'>Iniciar Temporada {seasonState?.season ? seasonState.season + 1 : 2}</span>
           </button>
         )}
 
-        {/* Fixtures e información de eventos de la semana actual (ABAJO DEL BOTÓN) */}
-        <div className='bg-black/30 rounded-2xl p-2.5 border border-white/5 space-y-1.5'>
-          <div className='flex items-center justify-between text-[8px] font-black uppercase tracking-widest text-slate-400 px-1'>
-            <span>Eventos y Partidos de la Semana {Math.min(42, currentWeek)}</span>
+        {/* Eventos, partidos y calendario de la semana actual */}
+        <div className='bg-black/30 rounded-2xl p-2.5 border border-white/5 space-y-1.5 overflow-hidden'>
+          <div className='flex items-center justify-between gap-2 text-[8px] font-black uppercase tracking-widest text-slate-400 px-0.5'>
+            <span className='truncate'>Eventos Semana {Math.min(42, currentWeek)}</span>
             <button 
               onClick={onOpenSeasonCalendar} 
-              className='text-amber-400 hover:underline flex items-center gap-0.5'
+              className='text-amber-400 hover:underline flex items-center gap-0.5 shrink-0 text-[8px]'
             >
-              <span>Ver 42 semanas</span>
-              <ArrowRight size={10} />
+              <span>Ver Calendario</span>
+              <ArrowRight size={9} />
             </button>
           </div>
-          <div className='grid gap-1'>
+          <div className='grid gap-1.5'>
             {weekData?.fixtures?.map((fix, idx) => (
               <div 
                 key={fix.id || idx}
-                className={`flex items-center justify-between p-2 rounded-xl text-[9px] border ${
+                className={`p-2 sm:p-2.5 rounded-xl border flex flex-col gap-1 overflow-hidden ${
                   fix.competicion === 'CHAMPIONS'
-                    ? 'bg-blue-950/40 border-blue-500/20 text-blue-200'
+                    ? 'bg-blue-950/40 border-blue-500/30 text-blue-200'
                     : fix.competicion === 'EUROPA_LEAGUE'
-                    ? 'bg-amber-950/40 border-amber-500/20 text-amber-200'
+                    ? 'bg-amber-950/40 border-amber-500/30 text-amber-200'
                     : fix.competicion === 'SELECCIONES'
-                    ? 'bg-cyan-950/40 border-cyan-500/20 text-cyan-200'
-                    : 'bg-emerald-950/40 border-emerald-500/20 text-emerald-200'
+                    ? 'bg-cyan-950/40 border-cyan-500/30 text-cyan-200'
+                    : 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200'
                 }`}
               >
-                <div className='flex items-center gap-2 min-w-0'>
-                  <span className='font-black uppercase tracking-wider text-[8px] px-1.5 py-0.5 rounded bg-black/40'>
-                    {fix.competicion}
-                  </span>
-                  <span className='font-bold truncate'>
-                    {fix.ronda}
-                  </span>
-                </div>
-                <div className='flex items-center gap-1 shrink-0'>
-                  <span className='text-[7.5px] font-black uppercase tracking-wider opacity-70'>
-                    {fix.slot}
-                  </span>
-                  {fix.esPartido ? (
-                    <span className='text-[7px] font-black uppercase px-1 py-0.5 rounded bg-emerald-500/30 text-emerald-300'>
-                      Partido
+                <div className='flex items-center justify-between gap-1.5 min-w-0'>
+                  <div className='flex items-center gap-1.5 min-w-0 flex-1'>
+                    <span className='font-black uppercase tracking-wider text-[7px] sm:text-[7.5px] px-1.5 py-0.5 rounded bg-black/50 border border-white/10 shrink-0'>
+                      {fix.competicion === 'CHAMPIONS'
+                        ? 'Champions'
+                        : fix.competicion === 'EUROPA_LEAGUE'
+                        ? 'Europa'
+                        : fix.competicion === 'SELECCIONES'
+                        ? 'FIFA'
+                        : 'Liga'}
                     </span>
-                  ) : (
-                    <span className='text-[7px] font-black uppercase px-1 py-0.5 rounded bg-amber-500/30 text-amber-300'>
-                      Hito
+                    <span className='font-black uppercase tracking-tight text-[9px] sm:text-[10px] text-white truncate'>
+                      {fix.title || fix.ronda}
                     </span>
-                  )}
+                  </div>
+                  <div className='flex items-center gap-1 shrink-0'>
+                    <span className='text-[6.5px] sm:text-[7.5px] font-bold uppercase tracking-wider opacity-75 px-1 py-0.5 rounded bg-black/30 whitespace-nowrap'>
+                      {fix.slot === 'FINDE' ? 'Fin de Sem.' : fix.slot === 'MITAD' ? 'Entre Sem.' : 'F. Única'}
+                    </span>
+                    {fix.esPartido ? (
+                      <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 whitespace-nowrap'>
+                        Partido
+                      </span>
+                    ) : (
+                      <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300 border border-amber-500/30 whitespace-nowrap'>
+                        Hito
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {fix.desc && (
+                  <p className='text-[7.5px] sm:text-[8.5px] text-slate-300 font-medium leading-snug line-clamp-2'>
+                    {fix.desc}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -3682,6 +3667,8 @@ function DiceFootballApp() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [championModalTab, setChampionModalTab] = useState<'stats' | 'results' | 'promotions' | 'bracket'>('stats');
   const [championModalDiv, setChampionModalDiv] = useState(1);
+  const [bracketRoundFilter, setBracketRoundFilter] = useState<'ALL' | string>('ALL');
+  const [championModalBracketFilter, setChampionModalBracketFilter] = useState<'ALL' | string>('ALL');
   const [standingsView, setStandingsView] = useState<'current' | 'previous'>('current');
   const [careerTab, setCareerTab] = useState('main');
 
@@ -3763,13 +3750,27 @@ function DiceFootballApp() {
               };
             }
           });
+          if (!merged['C1']?.teams?.length || !merged['C1']?.groups) {
+            const clData = getAutoFillData('C1', merged);
+            if (clData) {
+              merged['C1'] = {
+                ...defaultComps['C1'],
+                ...merged['C1'],
+                ...clData,
+                id: 'C1',
+                name: 'Champions League',
+                type: 'cup'
+              };
+            }
+          }
           if (merged['C1']?.bracket) {
             merged['C1'].bracket = sanitizeChampionsBracket(merged['C1'].bracket, merged['C1'].teams);
           }
           if (merged['C3']) {
-            if (!merged['C3'].bracket || !merged['C3'].bracket.Dieciseisavos || merged['C3'].phase === 'groups') {
+            if (!merged['C3'].teams?.length || !merged['C3'].bracket || !merged['C3'].bracket.Dieciseisavos || merged['C3'].phase === 'groups') {
               const uelData = getAutoFillData('C3', merged);
               merged['C3'] = {
+                ...defaultComps['C3'],
                 ...merged['C3'],
                 ...uelData,
                 id: 'C3',
@@ -4006,12 +4007,17 @@ function DiceFootballApp() {
 
     const seasonNow = seasonState.season || 1;
     const seasonTitles: any[] = [];
+    let careerQualifiedCLName: string | null = null;
+    let careerQualifiedUELName: string | null = null;
+
     setComps(prev => {
       const next = { ...prev };
+      
+      // 1. PRIMERO: Garantizar que TODAS las 8 ligas queden 100% terminadas en la temporada que finaliza
+      const finishedLeaguesState: any = { ...prev };
       LEAGUE_IDS.forEach(id => {
-        let c = next[id];
+        let c = finishedLeaguesState[id];
         if (!c) return;
-        // Garantizar que ligas con jornadas pendientes (ej. 38 jornadas frente a ligas de 34) queden 100% resueltas antes del nuevo año
         if (!leagueSeasonOver(c)) {
           const runDivToFinish = (teamsKey: string, mdKey: string, histKey: string, winKey: string, isDiv2?: boolean) => {
             let guard = 0;
@@ -4031,47 +4037,109 @@ function DiceFootballApp() {
           runDivToFinish('teams', 'matchday', 'history', 'showWinner', false);
           runDivToFinish('teams2', 'matchday2', 'history2', 'showWinner2', true);
         }
-        const r1 = buildSeasonRecord(c.teams, seasonNow);
-        const r2 = buildSeasonRecord(c.teams2, seasonNow);
-        if (r1) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
-        if (r2) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
-        const ns = computeLeagueNewSeason(c) || {};
-        next[id] = {
-          ...c, ...ns,
-          matchday: 0, matchday2: 0, history: [], history2: [],
-          showWinner: false, showWinner2: false
+        
+        // Guardar la foto fija de la clasificación definitiva de esta temporada que acaba de terminar
+        const snap1 = buildStandingsSnapshot(c.teams);
+        const snap2 = buildStandingsSnapshot(c.teams2);
+        finishedLeaguesState[id] = {
+          ...c,
+          previousStandings: snap1,
+          previousStandings2: snap2,
+          isLeagueFinished: true
         };
       });
 
-      // Configuración de la nueva Champions League clasificada por el mérito deportivo de la temporada
-      const careerQualifiedName = (() => {
-        if (!career.active || !career.teamId || career.div !== 1) return null;
-        const comp = next[career.compId];
-        const table = [...(comp?.teams || [])].sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf);
-        const pos = table.findIndex(t => t.id === career.teamId) + 1;
-        const maxSpots = career.compId === 'L7' ? 8 : 4;
-        return pos > 0 && pos <= maxSpots ? table[pos - 1].name : null;
-      })();
-      const clNew = getAutoFillData('C1', next, careerQualifiedName ? [careerQualifiedName] : []);
+      // 2. Determinar si el club del usuario en modo carrera clasificó a UCL o UEL en esta misma temporada finalizada
+      if (career.active && career.teamId && career.compId && finishedLeaguesState[career.compId]) {
+        const finishedComp = finishedLeaguesState[career.compId];
+        if (career.div === 1 && Array.isArray(finishedComp.teams)) {
+          const sortedD1 = [...finishedComp.teams].sort((a: any, b: any) => 
+            (b.pts || 0) - (a.pts || 0) || 
+            ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) || 
+            (b.gf || 0) - (a.gf || 0)
+          );
+          const pos = sortedD1.findIndex((t: any) => t.id === career.teamId || t.name === (careerTeam?.name || '')) + 1;
+          if (pos >= 1 && pos <= 4) {
+            // Clasificado a Champions League (Top 4)
+            careerQualifiedCLName = careerTeam?.name || sortedD1[pos - 1]?.name || null;
+          } else if (pos === 5 || pos === 6 || (career.compId === 'L7' && pos <= 8)) {
+            // Clasificado a UEFA Europa League (5.º y 6.º puesto)
+            careerQualifiedUELName = careerTeam?.name || sortedD1[pos - 1]?.name || null;
+          }
+        }
+      }
+
+      // 3. Generar la nueva Champions League (C1) TOMADA EXCLUSIVAMENTE de la temporada finalizada
+      const clNew = getAutoFillData('C1', finishedLeaguesState, careerQualifiedCLName ? [careerQualifiedCLName] : []);
       if (clNew) {
-        const mine = careerQualifiedName ? (clNew.teams || []).find((t: any) => t.name === careerQualifiedName) : null;
+        const mine = careerQualifiedCLName ? (clNew.teams || []).find((t: any) => t.name === careerQualifiedCLName) : null;
         next['C1'] = {
           ...clNew,
+          id: 'C1',
           name: 'Champions League',
           type: 'cup',
           matchday: 0,
           history: [],
           phase: 'groups',
           showWinner: false,
-          careerTeamName: careerQualifiedName || null,
+          season: seasonNow + 1,
+          sourceSeason: seasonNow,
+          careerTeamName: careerQualifiedCLName || null,
           careerTeamId: mine?.id || null,
           userTeamId: mine?.id || clNew.userTeamId
         };
       } else {
         const defaults = getDefaultComps();
-        next['C1'] = { ...defaults['C1'] };
+        next['C1'] = { ...defaults['C1'], season: seasonNow + 1, sourceSeason: seasonNow };
       }
-      next['C3'] = { ...buildUELKnockout(next), id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+
+      // 4. Generar la nueva UEFA Europa League (C3) TOMADA EXCLUSIVAMENTE de la misma temporada finalizada
+      const uelNew = getAutoFillData('C3', finishedLeaguesState, careerQualifiedUELName ? [careerQualifiedUELName] : []);
+      if (uelNew) {
+        const mine = careerQualifiedUELName ? (uelNew.teams || []).find((t: any) => t.name === careerQualifiedUELName) : null;
+        next['C3'] = {
+          ...uelNew,
+          id: 'C3',
+          name: 'UEFA Europa League',
+          type: 'cup',
+          matchday: 0,
+          history: [],
+          phase: 'Dieciseisavos',
+          showWinner: false,
+          season: seasonNow + 1,
+          sourceSeason: seasonNow,
+          careerTeamName: careerQualifiedUELName || null,
+          careerTeamId: mine?.id || null,
+          userTeamId: mine?.id || uelNew.userTeamId
+        };
+      }
+
+      // 5. SOLO AHORA, archivar títulos y avanzar las ligas a la nueva temporada (reseteo y ascensos/descensos)
+      LEAGUE_IDS.forEach(id => {
+        const c = finishedLeaguesState[id];
+        const r1 = buildSeasonRecord(c.teams, seasonNow);
+        const r2 = buildSeasonRecord(c.teams2, seasonNow);
+        if (r1) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
+        if (r2) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
+        
+        const ns = computeLeagueNewSeason(c) || {};
+        const prevSnapshot = buildStandingsSnapshot(c.teams);
+        const prevSnapshot2 = buildStandingsSnapshot(c.teams2);
+        
+        next[id] = {
+          ...c,
+          ...ns,
+          matchday: 0,
+          matchday2: 0,
+          history: [],
+          history2: [],
+          showWinner: false,
+          showWinner2: false,
+          previousStandings: prevSnapshot,
+          previousStandings2: prevSnapshot2
+        };
+      });
+
       return next;
     });
     if (seasonTitles.length > 0) {
@@ -4097,6 +4165,10 @@ function DiceFootballApp() {
       return {
         ...c,
         div: updatedDiv,
+        clQualified: Boolean(careerQualifiedCLName),
+        clQualifiedFor: careerQualifiedCLName ? seasonNow + 1 : null,
+        uelQualified: Boolean(careerQualifiedUELName),
+        uelQualifiedFor: careerQualifiedUELName ? seasonNow + 1 : null,
         trophies: {
           ...c.trophies,
           promotions: (c.trophies?.promotions || 0) + (wonPromotion ? 1 : 0)
@@ -8241,35 +8313,13 @@ function DiceFootballApp() {
     const currentHistory = isDiv2 ? activeComp.history2 : activeComp.history;
     const currentShowWinner = isDiv2 ? activeComp.showWinner2 : activeComp.showWinner;
 
-    if (!currentTeams || currentTeams.length === 0) {
-      return (
-        <div className='flex-grow flex flex-col items-center justify-center text-center p-8'>
-          <div className='w-24 h-24 bg-slate-900/30 backdrop-blur-md rounded-3xl flex items-center justify-center mb-8 border border-white/10 shadow-2xl'><Trophy size={48} className='text-slate-400' /></div>
-          <h2 className='text-3xl font-black italic uppercase mb-2 text-white drop-shadow-md'>{activeComp?.name}</h2>
-          <p className='text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-10 drop-shadow-md'>Faltan equipos en {isDiv2 ? '2ª' : '1ª'} División.</p>
-          <div className='space-y-4 w-full max-w-xs'>
-            {!isLeague && (
-              <button onClick={() => {
-                 let compsState: any = null;
-                 try {
-                   const saved = window.localStorage.getItem(`${APP_ID}_comps`);
-                   if (saved) compsState = JSON.parse(saved);
-                 } catch (e) {}
-                 updateActiveComp(getShuffleData(activeCompId, compsState || comps || getDefaultComps()));
-              }} className='w-full bg-emerald-600/80 backdrop-blur-md hover:bg-emerald-500 text-white py-4 rounded-2xl text-[11px] font-black uppercase italic tracking-widest shadow-xl transition-all active:scale-95 flex justify-center items-center gap-2'>
-                <Shuffle size={16}/> Sorteo Dinámico Oficial
-              </button>
-            )}
-            <button onClick={() => setView('hub')} className='w-full bg-slate-900/40 backdrop-blur-md border border-white/10 text-slate-200 py-4 rounded-2xl text-[11px] font-black uppercase italic tracking-widest transition-all active:scale-95'>Volver al Inicio</button>
-          </div>
-        </div>
-      );
-    }
-
-    const sortedTeams = [...currentTeams].sort((a, b) => ((b.pts || 0) - (a.pts || 0)) || (((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0))));
+    const sortedTeams = useMemo(() => {
+      if (!currentTeams || currentTeams.length === 0) return [];
+      return [...currentTeams].sort((a, b) => ((b.pts || 0) - (a.pts || 0)) || (((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0))));
+    }, [currentTeams]);
 
     const currentUserTeamId = isDiv2 ? (activeComp.userTeamId2 || activeComp.teams2?.[0]?.id) : activeComp.userTeamId;
-    const userTeam = currentTeams.find(t => t.id === currentUserTeamId) || currentTeams[0];
+    const userTeam = (currentTeams && currentTeams.length > 0) ? (currentTeams.find(t => t.id === currentUserTeamId) || currentTeams[0]) : null;
 
     const winner = useMemo(() => {
       if (!currentTeams || currentTeams.length === 0) return null;
@@ -8293,15 +8343,45 @@ function DiceFootballApp() {
 
     useEffect(() => {
       if (activeCompId === 'C3') {
-        if (!activeComp?.teams?.length || !activeComp?.bracket?.Dieciseisavos || activeComp?.phase === 'groups') {
+        if (!activeComp?.teams?.length || !activeComp?.bracket) {
           const uelData = getAutoFillData('C3', comps);
           if (uelData) updateActiveComp({ ...uelData, id: 'C3', name: 'UEFA Europa League', type: 'cup' });
+        }
+      } else if (activeCompId === 'C1') {
+        if (!activeComp?.teams?.length || !activeComp?.groups) {
+          const clData = getAutoFillData('C1', comps);
+          if (clData) updateActiveComp({ ...clData, id: 'C1', name: 'Champions League', type: 'cup' });
         }
       } else if (!isLeague && activeComp.phase !== 'groups' && !activeComp.bracket) {
         const newBracket = generateKnockoutBrackets(activeComp);
         if (newBracket) updateActiveComp({ bracket: newBracket });
       }
-    }, [activeCompId, activeComp?.phase, activeComp?.bracket, activeComp?.teams, isLeague]);
+    }, [activeCompId, activeComp?.phase, activeComp?.bracket, activeComp?.teams?.length, activeComp?.groups, isLeague]);
+
+    if (!currentTeams || currentTeams.length === 0) {
+      return (
+        <div className='flex-grow flex flex-col items-center justify-center text-center p-8'>
+          <div className='w-24 h-24 bg-slate-900/30 backdrop-blur-md rounded-3xl flex items-center justify-center mb-8 border border-white/10 shadow-2xl'><Trophy size={48} className='text-slate-400' /></div>
+          <h2 className='text-3xl font-black italic uppercase mb-2 text-white drop-shadow-md'>{activeComp?.name}</h2>
+          <p className='text-[10px] font-bold text-slate-300 uppercase tracking-widest mb-10 drop-shadow-md'>Configurando participantes oficiales...</p>
+          <div className='space-y-4 w-full max-w-xs'>
+            {!isLeague && (
+              <button onClick={() => {
+                 let compsState: any = null;
+                 try {
+                   const saved = window.localStorage.getItem(`${APP_ID}_comps`);
+                   if (saved) compsState = JSON.parse(saved);
+                 } catch (e) {}
+                 updateActiveComp(getAutoFillData(activeCompId, compsState || comps || getDefaultComps()));
+              }} className='w-full bg-emerald-600/80 backdrop-blur-md hover:bg-emerald-500 text-white py-4 rounded-2xl text-[11px] font-black uppercase italic tracking-widest shadow-xl transition-all active:scale-95 flex justify-center items-center gap-2'>
+                <Shuffle size={16}/> Cargar Equipos Oficiales
+              </button>
+            )}
+            <button onClick={() => setView('hub')} className='w-full bg-slate-900/40 backdrop-blur-md border border-white/10 text-slate-200 py-4 rounded-2xl text-[11px] font-black uppercase italic tracking-widest transition-all active:scale-95'>Volver al Inicio</button>
+          </div>
+        </div>
+      );
+    }
 
     const getGroupMatch = () => {
       if (!currentTeams || currentTeams.length === 0) return null;
@@ -8923,17 +9003,46 @@ function DiceFootballApp() {
                 )}
 
                 {championModalTab === 'bracket' && !isLeague && activeComp.bracket && (
-                  <div className='space-y-2'>
+                  <div className='space-y-3 pb-8'>
+                    {/* SELECTOR DE RONDA EN CHIPS */}
+                    <div className='flex items-center gap-1.5 overflow-x-auto pb-1.5 custom-scrollbar -mx-1 px-1 touch-auto'>
+                      {['ALL', 'Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final']
+                        .filter(p => p === 'ALL' || activeComp.bracket[p])
+                        .map(rk => (
+                          <button
+                            key={rk}
+                            type='button'
+                            onClick={() => setChampionModalBracketFilter(rk)}
+                            className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                              championModalBracketFilter === rk
+                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md font-black scale-105 border border-blue-400/40'
+                                : 'bg-slate-900/70 text-slate-400 hover:text-white border border-white/10'
+                            }`}
+                          >
+                            {rk === 'ALL' ? 'Todas' : rk}
+                          </button>
+                      ))}
+                    </div>
+
                     <div className='flex items-center justify-between px-1 text-[8px] font-black uppercase text-slate-400'>
                       <span className='text-slate-200'>Cuadro Eliminatorio</span>
-                      <span className='bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10 text-slate-400'>← Desliza para explorar →</span>
+                      <span className='bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10 text-slate-400'>
+                        {championModalBracketFilter === 'ALL' ? '← Desliza para explorar →' : 'Vista de Ronda'}
+                      </span>
                     </div>
-                    <div className='flex gap-4 overflow-x-auto custom-scrollbar pb-4 scroll-smooth -mx-1 px-1 touch-pan-x'>
-                      {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final'].filter(p => activeComp.bracket[p]).map(phase => {
+
+                    <div className={`${
+                      championModalBracketFilter === 'ALL'
+                        ? 'flex gap-4 overflow-x-auto custom-scrollbar pb-6 scroll-smooth -mx-1 px-1 touch-auto'
+                        : 'grid grid-cols-1 md:grid-cols-2 gap-4'
+                    }`}>
+                      {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final']
+                        .filter(p => activeComp.bracket[p] && (championModalBracketFilter === 'ALL' || championModalBracketFilter === p))
+                        .map(phase => {
                         const isChampions = activeCompId === 'C1' || activeCompId === 'C3';
                         const isTwoLegged = isChampions && phase !== 'Final';
                         return (
-                          <div key={phase} className='min-w-[260px] sm:min-w-[290px] flex-shrink-0 space-y-2.5'>
+                          <div key={phase} className={`${championModalBracketFilter === 'ALL' ? 'min-w-[260px] sm:min-w-[290px] flex-shrink-0' : 'w-full'} space-y-2.5`}>
                             <div className='flex items-center justify-between bg-slate-900/60 px-3 py-1.5 rounded-xl border border-white/10'>
                               <h4 className='text-[10px] font-black uppercase text-blue-300'>{phase === 'Dieciseisavos' ? 'Dieciseisavos (1/16)' : phase}</h4>
                               {isTwoLegged ? (
@@ -9498,59 +9607,22 @@ function DiceFootballApp() {
                  );
               }
               const isEuropeanOffWeek = (activeCompId === 'C1' && !isChampionsDate) || (activeCompId === 'C3' && !isEuropaDate);
-              if (isEuropeanOffWeek) {
-                const targetWeek = activeCompId === 'C1' ? nextClWeek : nextUelWeek;
-                return (
-                  <div className='p-4 rounded-2xl bg-slate-900/80 backdrop-blur-md border border-white/10 space-y-3 shadow-lg text-left'>
-                    <div className='flex items-center gap-2'>
-                      <span className={`text-[8.5px] font-black uppercase px-2.5 py-1 rounded-lg border ${
-                        activeCompId === 'C1'
-                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                          : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                      }`}>
-                        Modo Informativo · Semana Oficial {targetWeek}
-                      </span>
-                    </div>
-                    <p className='text-[10.5px] text-slate-300 font-medium leading-relaxed'>
-                      Esta semana no corresponde jornada europea de {activeComp.name}. Podrás disputar o simular este partido al avanzar a la <strong>Semana {targetWeek}</strong> en el calendario de la temporada regular.
-                    </p>
-                    <div className='grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1'>
-                      {activeCompId === 'C1' && (
-                        <button
-                          onClick={() => setCompView('groups')}
-                          className='py-2.5 px-2 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-400/40 text-blue-200 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5'
-                        >
-                          <BarChart3 size={13} /> Ver Grupos
-                        </button>
-                      )}
-                      <button
-                        onClick={() => setCompView('bracket')}
-                        className={`py-2.5 px-2 rounded-xl border text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 ${
-                          activeCompId === 'C1'
-                            ? 'bg-purple-600/30 hover:bg-purple-600/50 border-purple-400/40 text-purple-200'
-                            : 'bg-amber-600/30 hover:bg-amber-600/50 border-amber-400/40 text-amber-200'
-                        }`}
-                      >
-                        <Swords size={13} /> Ver Cuadro
-                      </button>
-                      <button
-                        onClick={() => setView('hub')}
-                        className='py-2.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5'
-                      >
-                        <RotateCcw size={13} /> Volver al Hub
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
+              const targetWeek = activeCompId === 'C1' ? nextClWeek : nextUelWeek;
 
               return (
                 <div className='space-y-2'>
-                <button onClick={() => startMatch(homeId, awayId, isDiv2)} className='w-full bg-slate-800/90 hover:bg-slate-700/90 text-white py-4 rounded-2xl text-xs font-black uppercase italic tracking-widest border border-white/20 active:scale-95 transition-colors flex flex-col items-center justify-center'>
-                  <span>{activeComp.phase === 'Final' ? 'Gran Final' : activeComp.phase === 'TercerPuesto' ? 'Partido por 3º Puesto' : ('Jugar ' + (isLeague || activeComp.phase === 'groups' ? 'Jornada ' + (currentMatchday + 1) : activeComp.phase + (activeCompId === 'C1' ? (activeComp.matchday % 2 === 0 ? ' (Ida)' : ' (Vuelta)') : '')))}</span>
-                  <span className='text-[7px] opacity-60 mt-0.5 tracking-normal text-slate-300'>{homeTeam?.opp} vs {awayTeam?.opp} TIROS DISPONIBLES</span>
-
-                </button>
+                  {isEuropeanOffWeek && (
+                    <div className='px-3 py-2 rounded-xl bg-blue-950/60 border border-blue-400/20 flex items-center justify-between text-left'>
+                      <span className='text-[8.5px] font-black uppercase tracking-wider text-blue-300 flex items-center gap-1'>
+                        <Trophy size={11} className='text-amber-400' /> Calendario Continental · Semana {targetWeek || 7}
+                      </span>
+                      <span className='text-[8px] font-bold text-slate-300'>Semana actual: {currentWeek}</span>
+                    </div>
+                  )}
+                  <button onClick={() => startMatch(homeId, awayId, isDiv2)} className='w-full bg-slate-800/90 hover:bg-slate-700/90 text-white py-4 rounded-2xl text-xs font-black uppercase italic tracking-widest border border-white/20 active:scale-95 transition-colors flex flex-col items-center justify-center'>
+                    <span>{activeComp.phase === 'Final' ? 'Gran Final' : activeComp.phase === 'TercerPuesto' ? 'Partido por 3º Puesto' : ('Jugar ' + (isLeague || activeComp.phase === 'groups' ? 'Jornada ' + (currentMatchday + 1) : activeComp.phase + (activeCompId === 'C1' ? (activeComp.matchday % 2 === 0 ? ' (Ida)' : ' (Vuelta)') : '')))}</span>
+                    <span className='text-[7px] opacity-60 mt-0.5 tracking-normal text-slate-300'>{homeTeam?.opp} vs {awayTeam?.opp} TIROS DISPONIBLES</span>
+                  </button>
                 {isLeague && leaguePendingNow && (
                   <button onClick={() => simulateLeagueToGlobal(activeCompId)} className='w-full bg-slate-800/90 hover:bg-slate-700/90 border border-white/15 text-slate-200 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-colors flex items-center justify-center gap-2'>
                     <Dices size={15} className='text-slate-300' /> Simular Jornada {currentMatchday + 1}
@@ -10020,7 +10092,7 @@ function DiceFootballApp() {
     );
 
     if (compView === 'bracket') return (
-      <div className='flex-grow px-4 pb-20'>
+      <div className='flex-grow px-4 pb-36 min-h-screen overflow-y-auto'>
         <div className='flex items-center gap-3 mb-6'>
           <button onClick={() => setCompView('main')} className='p-2 bg-slate-900/30 backdrop-blur-md rounded-xl active:scale-95 transition-all border border-white/10'><ChevronLeft /></button>
           <h2 className='text-xl font-black italic uppercase drop-shadow-md'>Eliminatorias</h2>
@@ -10028,17 +10100,46 @@ function DiceFootballApp() {
         {!activeComp.bracket ? (
           <div className='text-center py-20 text-slate-300 font-black bg-slate-900/30 backdrop-blur-md rounded-[2rem] border border-white/10 uppercase italic text-[10px] shadow-lg'>Las eliminatorias se generarán al finalizar la fase de grupos.</div>
         ) : (
-          <div className='space-y-2'>
+          <div className='space-y-4'>
+            {/* SELECTOR DE RONDA EN CHIPS */}
+            <div className='flex items-center gap-1.5 overflow-x-auto pb-1.5 custom-scrollbar -mx-1 px-1 touch-auto'>
+              {['ALL', 'Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'TercerPuesto', 'Final']
+                .filter(p => p === 'ALL' || activeComp.bracket[p])
+                .map(rk => (
+                  <button
+                    key={rk}
+                    type='button'
+                    onClick={() => setBracketRoundFilter(rk)}
+                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                      bracketRoundFilter === rk
+                        ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md font-black scale-105 border border-purple-400/40'
+                        : 'bg-slate-900/70 text-slate-400 hover:text-white border border-white/10'
+                    }`}
+                  >
+                    {rk === 'ALL' ? 'Todas las Rondas' : rk === 'Dieciseisavos' ? 'Dieciseisavos' : rk === 'TercerPuesto' ? '3º Puesto' : rk}
+                  </button>
+              ))}
+            </div>
+
             <div className='flex items-center justify-between px-1 text-[8px] font-black uppercase text-slate-400'>
               <span>Rondas Eliminatorias</span>
-              <span className='bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10 text-slate-400'>← Desliza horizontalmente para explorar →</span>
+              <span className='bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10 text-slate-400'>
+                {bracketRoundFilter === 'ALL' ? '← Desliza lateral y verticalmente →' : 'Vista de Ronda'}
+              </span>
             </div>
-            <div className='flex gap-4 overflow-x-auto custom-scrollbar pb-8 scroll-smooth -mx-1 px-1 touch-pan-x'>
-            {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'TercerPuesto', 'Final'].filter(p => activeComp.bracket[p]).map(phase => {
+
+            <div className={`${
+              bracketRoundFilter === 'ALL'
+                ? 'flex gap-4 overflow-x-auto custom-scrollbar pb-8 scroll-smooth -mx-1 px-1 touch-auto'
+                : 'grid grid-cols-1 md:grid-cols-2 gap-4'
+            }`}>
+            {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'TercerPuesto', 'Final']
+              .filter(p => activeComp.bracket[p] && (bracketRoundFilter === 'ALL' || bracketRoundFilter === p))
+              .map(phase => {
               const isChampions = activeCompId === 'C1' || activeCompId === 'C3';
               const isTwoLegged = isChampions && phase !== 'Final' && phase !== 'TercerPuesto';
               return (
-                <div key={phase} className='min-w-[260px] sm:min-w-[290px] flex-shrink-0 space-y-2.5'>
+                <div key={phase} className={`${bracketRoundFilter === 'ALL' ? 'min-w-[260px] sm:min-w-[290px] flex-shrink-0' : 'w-full'} space-y-2.5`}>
                   <div className='flex items-center justify-between bg-slate-900/60 px-3 py-2 rounded-xl border border-white/10'>
                     <h3 className='text-[10px] font-black uppercase text-blue-300'>{phase === 'Dieciseisavos' ? 'Dieciseisavos (1/16)' : phase === 'TercerPuesto' ? '3º Puesto' : phase}</h3>
                     {isTwoLegged ? (
