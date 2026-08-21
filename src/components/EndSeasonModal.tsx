@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Trophy, CheckCircle2, XCircle, Inbox, FileText, ArrowRight, Shield as ShieldIcon, RotateCcw, X, ChevronLeft } from 'lucide-react';
 
@@ -47,6 +47,15 @@ export const EndSeasonModal: React.FC<EndSeasonModalProps> = ({
   offersCount,
   ui
 }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
   const { Shield } = ui || {};
 

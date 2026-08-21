@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, Calendar, Trophy, Shield as ShieldIcon, Sparkles, 
   CheckCircle, Clock, ChevronRight, AlertCircle, Briefcase, Flame, Layers
@@ -27,6 +27,15 @@ export const SeasonCalendarModal: React.FC<SeasonCalendarModalProps> = ({
 }) => {
   const [activeFilter, setActiveFilter] = useState<'ALL' | Competicion>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>('ALL');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

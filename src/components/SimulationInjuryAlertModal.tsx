@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle, HeartPulse, ShieldCheck, Stethoscope, Coins,
@@ -33,6 +33,19 @@ export const SimulationInjuryAlertModal: React.FC<SimulationInjuryAlertModalProp
   ui
 }) => {
   const { DieIcon, Shield } = ui;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (onCancel) onCancel();
+        else onSelectOption('accept_injury');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onCancel, onSelectOption]);
+
   if (!isOpen) return null;
 
   const currentPE = career?.pe || 0;

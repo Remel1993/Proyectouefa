@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, Sparkles, AlertTriangle, FileSignature,
@@ -43,6 +43,21 @@ export const ApplicationResolutionModal: React.FC<ApplicationResolutionModalProp
 }) => {
   const [confirmReject, setConfirmReject] = useState(false);
   const [confirmAccept, setConfirmAccept] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (resolution && resolution.accepted && resolution.offer) {
+          onDecideLater(resolution.offer);
+        } else {
+          onDismiss();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, resolution, onDecideLater, onDismiss]);
 
   if (!isOpen || !resolution) return null;
 

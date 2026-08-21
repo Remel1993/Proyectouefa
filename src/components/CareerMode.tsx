@@ -403,7 +403,7 @@ export const CareerView = ({
     def: Math.max(career.baseDist?.def || 1, team?.def || 1)
   }), [career.baseDist, team?.att, team?.opp, team?.def]);
   const currentMatchday = career.div === 2 ? (comp?.matchday2 || 0) : (comp?.matchday || 0);
-  const activeInjury = career.activeInjury && career.activeInjury.matchday === currentMatchday ? career.activeInjury : null;
+  const activeInjury = career.activeInjury && (career.activeInjury.matchday === currentMatchday || career.activeInjury.matchKey) ? career.activeInjury : null;
   const effectiveBase = activeInjury ? { ...base, [activeInjury.attr]: Math.max(1, (base[activeInjury.attr] || 1) - 1) } : base;
   const totalTeamStrength = (base?.att || 0) + (base?.opp || 0) + (base?.def || 0);
 
@@ -926,6 +926,12 @@ export const CareerView = ({
 
   const draws = useMemo(() => log.filter(l => l.result === 'D').length, [log]);
 
+  const isDroppedToUel = Boolean(
+    cl?.eliminated &&
+    uelInfo &&
+    !uelInfo.notQualified
+  );
+
   const objectives = useMemo(() => seasonObjectives({
     tier,
     div: career.div,
@@ -941,8 +947,13 @@ export const CareerView = ({
     clQualified: !!cl,
     clPhase: cl?.phase,
     clChampion: !!cl?.champion,
-    clEliminated: !!cl?.eliminated
-  }), [tier, career.div, position, expected, wins, draws, log.length, standings?.length, career.reputation, career.pe, cl]);
+    clEliminated: !!cl?.eliminated,
+    uelQualified: !!uelInfo && !uelInfo.notQualified,
+    uelPhase: uelInfo?.phase,
+    uelChampion: !!uelInfo?.champion,
+    uelEliminated: !!uelInfo?.eliminated,
+    droppedToUel: isDroppedToUel
+  }), [tier, career.div, position, expected, wins, draws, log.length, standings?.length, career.reputation, career.pe, cl, uelInfo, isDroppedToUel]);
 
   const coreObjectives = objectives.filter(o => !o.extra);
   const coreMet = coreObjectives.filter(o => o.done || o.status === 'completed').length;
@@ -972,7 +983,7 @@ export const CareerView = ({
 
   // Diagnóstico de candidaturas rechazadas
   const badStreakCount = career.badStreak || 0;
-  const hasTitles = (career.trophies?.leagues || 0) > 0 || (career.trophies?.promotions || 0) > 0;
+  const hasTitles = (career.trophies?.leagues || 0) > 0 || (career.trophies?.champions || 0) > 0 || (career.trophies?.uel || 0) > 0 || (career.trophies?.promotions || 0) > 0;
   const rejectionDiagnostic = useMemo(() => {
     return getRejectionReason({
       requiredRep: 50,

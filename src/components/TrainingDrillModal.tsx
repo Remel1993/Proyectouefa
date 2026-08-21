@@ -45,6 +45,15 @@ export const TrainingDrillModal: React.FC<TrainingDrillModalProps> = ({
   const [drillOutcome, setDrillOutcome] = useState<any | null>(null);
   const [pendingDecision, setPendingDecision] = useState<any | null>(null);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !rolling) onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, rolling, onClose]);
+
   const currentPE = career?.pe || 0;
   const immunityWeeks = career?.medicalImmunityWeeks || 0;
 

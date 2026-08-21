@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, Award, TrendingUp, Calendar, Trash2, X, Star, ChevronDown, ChevronUp, CheckCircle, Shield as ShieldIcon, Briefcase, Sparkles, Filter } from 'lucide-react';
 import { repBand } from '../lib/career';
@@ -26,6 +26,7 @@ export interface ArchivedCareer {
   trophies: {
     leagues: number;
     champions: number;
+    uel?: number;
     promotions: number;
   };
   seasonHistory: any[];
@@ -54,6 +55,15 @@ export const CareerHistoryArchiveModal: React.FC<CareerHistoryArchiveModalProps>
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [filterQuery, setFilterQuery] = useState('');
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const filteredCareers = pastCareers.filter(c => {
@@ -70,6 +80,7 @@ export const CareerHistoryArchiveModal: React.FC<CareerHistoryArchiveModalProps>
   const totalCareers = pastCareers.length;
   const totalLeagues = pastCareers.reduce((acc, c) => acc + (c.trophies?.leagues || 0), 0);
   const totalChampions = pastCareers.reduce((acc, c) => acc + (c.trophies?.champions || 0), 0);
+  const totalUel = pastCareers.reduce((acc, c) => acc + (c.trophies?.uel || 0), 0);
   const totalPromotions = pastCareers.reduce((acc, c) => acc + (c.trophies?.promotions || 0), 0);
   const totalMatches = pastCareers.reduce((acc, c) => acc + (c.stats?.matches || 0), 0);
   const totalWins = pastCareers.reduce((acc, c) => acc + (c.stats?.wins || 0), 0);
@@ -117,7 +128,7 @@ export const CareerHistoryArchiveModal: React.FC<CareerHistoryArchiveModalProps>
 
         {/* RESUMEN GLOBAL HISTÓRICO */}
         {totalCareers > 0 && (
-          <div className='grid grid-cols-2 sm:grid-cols-5 gap-2 shrink-0'>
+          <div className='grid grid-cols-2 sm:grid-cols-6 gap-2 shrink-0'>
             <div className='bg-black/40 rounded-2xl p-2.5 border border-white/5 text-center'>
               <p className='text-[8px] font-black uppercase text-slate-400'>Proyectos</p>
               <p className='text-base font-black italic text-white tabular-nums'>{totalCareers}</p>
@@ -130,9 +141,15 @@ export const CareerHistoryArchiveModal: React.FC<CareerHistoryArchiveModalProps>
             </div>
             <div className='bg-black/40 rounded-2xl p-2.5 border border-white/5 text-center'>
               <p className='text-[8px] font-black uppercase text-blue-400 flex items-center justify-center gap-1'>
-                <Award size={11} /> Champions
+                <Award size={11} /> UCL
               </p>
               <p className='text-base font-black italic text-blue-300 tabular-nums'>{totalChampions}</p>
+            </div>
+            <div className='bg-black/40 rounded-2xl p-2.5 border border-white/5 text-center'>
+              <p className='text-[8px] font-black uppercase text-amber-400 flex items-center justify-center gap-1'>
+                <Award size={11} /> UEL
+              </p>
+              <p className='text-base font-black italic text-amber-300 tabular-nums'>{totalUel}</p>
             </div>
             <div className='bg-black/40 rounded-2xl p-2.5 border border-white/5 text-center'>
               <p className='text-[8px] font-black uppercase text-emerald-400 flex items-center justify-center gap-1'>
@@ -223,9 +240,10 @@ export const CareerHistoryArchiveModal: React.FC<CareerHistoryArchiveModalProps>
                     <div className='grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-center text-[9px]'>
                       <div className='bg-black/30 rounded-xl p-2 border border-white/5'>
                         <p className='text-[7.5px] font-black uppercase text-slate-400'>Títulos Ganados</p>
-                        <p className='text-xs font-black text-amber-300 tabular-nums flex items-center justify-center gap-1.5 mt-0.5'>
+                        <p className='text-xs font-black text-amber-300 tabular-nums flex items-center justify-center gap-1.5 mt-0.5 flex-wrap'>
                           <span>🏆 {c.trophies?.leagues || 0}L</span>
                           <span>⭐ {c.trophies?.champions || 0}UCL</span>
+                          {(c.trophies?.uel || 0) > 0 && <span>🛡️ {c.trophies?.uel || 0}UEL</span>}
                           <span>🚀 {c.trophies?.promotions || 0}A</span>
                         </p>
                       </div>

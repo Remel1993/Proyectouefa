@@ -60,6 +60,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
 }) => {
   const { Shield } = ui;
   const [subTab, setSubTab] = useState<'match' | 'tactic' | 'bracket' | 'schedule' | 'teams' | 'objective'>('match');
+  const [bracketRoundFilter, setBracketRoundFilter] = useState<'ALL' | string>('ALL');
 
   // Identificar el equipo del modo carrera dentro de la UEFA Europa League (C3)
   const careerUelTeam = useMemo(() => {
@@ -150,8 +151,8 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
             if (bMatch && bMatch.sh !== null) {
               const hasVuelta = bMatch.sh2 !== null && bMatch.sh2 !== undefined;
               const isVuelta = dayStr.includes('Vuelta') || hasVuelta;
-              const totHId = (bMatch.sh || 0) + (bMatch.sa2 || 0);
-              const totAId = (bMatch.sa || 0) + (bMatch.sh2 || 0);
+              const totHId = (bMatch.sh || 0) + (bMatch.sh2 || 0);
+              const totAId = (bMatch.sa || 0) + (bMatch.sa2 || 0);
               const globalLeft = isVuelta ? totAId : totHId;
               const globalRight = isVuelta ? totHId : totAId;
 
@@ -161,11 +162,18 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                 if (totHId > totAId) winnerId = bMatch.hId;
                 else if (totAId > totHId) winnerId = bMatch.aId;
                 else if (bMatch.penH !== null && bMatch.penH !== undefined) {
-                  winnerId = bMatch.penH > bMatch.penA ? bMatch.aId : bMatch.hId;
+                  winnerId = (bMatch.penH || 0) > (bMatch.penA || 0) ? bMatch.hId : bMatch.aId;
                 }
                 if (winnerId !== null) {
                   qualified = winnerId === userUelId;
                 }
+              }
+
+              let penaltiesText = null;
+              if (hasVuelta && bMatch.penH !== null && bMatch.penH !== undefined && bMatch.penA !== null && bMatch.penA !== undefined) {
+                const penLeft = isVuelta ? bMatch.penA : bMatch.penH;
+                const penRight = isVuelta ? bMatch.penH : bMatch.penA;
+                penaltiesText = `(${penLeft}-${penRight} pen.)`;
               }
 
               aggregateInfo = {
@@ -174,7 +182,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                 leg1Score: `${bMatch.sh} - ${bMatch.sa}`,
                 leg2Score: hasVuelta ? `${bMatch.sh2} - ${bMatch.sa2}` : null,
                 globalScoreText: hasVuelta ? `${globalLeft} - ${globalRight}` : `${bMatch.sh} - ${bMatch.sa}`,
-                penaltiesText: (bMatch.penH !== null && bMatch.penH !== undefined) ? `(${bMatch.penH}-${bMatch.penA} pen.)` : null,
+                penaltiesText,
                 qualified
               };
             }
@@ -636,7 +644,27 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
             exit={{ opacity: 0, y: -8 }}
             className='space-y-4'
           >
-            {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final'].map(roundKey => {
+            {/* SELECTOR DE RONDA EN CHIPS HORIZONTALES */}
+            <div className='flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar -mx-1 px-1'>
+              {['ALL', 'Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final'].map(rk => (
+                <button
+                  key={rk}
+                  type='button'
+                  onClick={() => setBracketRoundFilter(rk)}
+                  className={`px-3 py-1 rounded-xl text-[8.5px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                    bracketRoundFilter === rk
+                      ? 'bg-amber-500 text-slate-950 shadow-md font-black scale-105'
+                      : 'bg-slate-900/60 text-slate-400 hover:text-white border border-white/10'
+                  }`}
+                >
+                  {rk === 'ALL' ? 'Todas las Rondas' : uelPhaseLabel(rk)}
+                </button>
+              ))}
+            </div>
+
+            {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final']
+              .filter(rk => bracketRoundFilter === 'ALL' || bracketRoundFilter === rk)
+              .map(roundKey => {
               const matches = Array.isArray(safeBracket?.[roundKey]) ? safeBracket[roundKey] : [safeBracket?.[roundKey]].filter(Boolean);
               if (!matches || matches.length === 0) return null;
 
@@ -660,14 +688,14 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
 
                       const playedIda = m.sh !== null && m.sh !== undefined;
                       const playedVuelta = m.sh2 !== null && m.sh2 !== undefined;
-                      const totH = (m.sh || 0) + (m.sa2 || 0);
-                      const totA = (m.sa || 0) + (m.sh2 || 0);
+                      const totH = (m.sh || 0) + (m.sh2 || 0);
+                      const totA = (m.sa || 0) + (m.sa2 || 0);
 
                       let winnerId = null;
                       if (roundKey === 'Final' && playedIda) {
                         winnerId = m.sh > m.sa ? m.hId : m.sa > m.sh ? m.aId : ((m.penH || 0) > (m.penA || 0) ? m.hId : m.aId);
                       } else if (playedVuelta) {
-                        winnerId = totH > totA ? m.hId : totA > totH ? m.aId : ((m.penH || 0) > (m.penA || 0) ? m.aId : m.hId);
+                        winnerId = totH > totA ? m.hId : totA > totH ? m.aId : ((m.penH || 0) > (m.penA || 0) ? m.hId : m.aId);
                       }
 
                       return (

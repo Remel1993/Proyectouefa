@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
 import { AlertTriangle, Trash2, Archive, X, Trophy, ArrowRight } from 'lucide-react';
 
@@ -24,14 +24,24 @@ export const DeleteCareerModal: React.FC<DeleteCareerModalProps> = ({
   career,
   team
 }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const managerName = career?.manager || 'Mánager';
   const teamName = team?.name || 'Club';
   const leagues = career?.trophies?.leagues || 0;
   const champions = career?.trophies?.champions || 0;
+  const uel = career?.trophies?.uel || 0;
   const promotions = career?.trophies?.promotions || 0;
-  const hasHistory = leagues > 0 || champions > 0 || promotions > 0 || (career?.seasonHistory?.length || 0) > 0 || (career?.stats?.matches || 0) > 0;
+  const hasHistory = leagues > 0 || champions > 0 || uel > 0 || promotions > 0 || (career?.seasonHistory?.length || 0) > 0 || (career?.stats?.matches || 0) > 0;
 
   const handleArchive = () => {
     if (typeof onConfirmArchiveAndReset === 'function') {
@@ -86,7 +96,9 @@ export const DeleteCareerModal: React.FC<DeleteCareerModalProps> = ({
                 <p className='text-[7.5px] text-slate-400 uppercase font-bold'>Reputación</p>
               </div>
               <div>
-                <p className='text-xs font-black text-yellow-300'>🏆 {leagues}L · ⭐ {champions}UCL</p>
+                <p className='text-xs font-black text-yellow-300'>
+                  🏆 {leagues}L · ⭐ {champions}UCL {uel > 0 && `· 🛡️ ${uel}UEL`}
+                </p>
                 <p className='text-[7.5px] text-slate-400 uppercase font-bold'>Palmarés</p>
               </div>
               <div>

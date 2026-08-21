@@ -148,14 +148,14 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
               // En la ida: hId es Local, aId es Visitante
               // En la vuelta: aId es Local (recibe la vuelta), hId es Visitante
               // Totales globales:
-              // hId: goles en ida (sh) + goles en vuelta (sa2)
-              // aId: goles en ida (sa) + goles en vuelta (sh2)
-              const totHId = (bMatch.sh || 0) + (bMatch.sa2 || 0);
-              const totAId = (bMatch.sa || 0) + (bMatch.sh2 || 0);
+              // hId: goles en ida (sh) + goles en vuelta (sh2)
+              // aId: goles en ida (sa) + goles en vuelta (sa2)
+              const totHId = (bMatch.sh || 0) + (bMatch.sh2 || 0);
+              const totAId = (bMatch.sa || 0) + (bMatch.sa2 || 0);
 
               // Alinear el resultado global de cara al escudo mostrado a la izquierda y derecha en este partido
-              const leftTotal = isVuelta ? totAId : (bMatch.sh || 0);
-              const rightTotal = isVuelta ? totHId : (bMatch.sa || 0);
+              const leftTotal = isVuelta ? totAId : totHId;
+              const rightTotal = isVuelta ? totHId : totAId;
               const globalLeft = isVuelta ? totAId : totHId;
               const globalRight = isVuelta ? totHId : totAId;
 
@@ -165,12 +165,18 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 if (totHId > totAId) winnerId = bMatch.hId;
                 else if (totAId > totHId) winnerId = bMatch.aId;
                 else if (bMatch.penH !== null && bMatch.penH !== undefined) {
-                  // penH es del local de vuelta (aId), penA es del visitante de vuelta (hId)
-                  winnerId = bMatch.penH > bMatch.penA ? bMatch.aId : bMatch.hId;
+                  winnerId = (bMatch.penH || 0) > (bMatch.penA || 0) ? bMatch.hId : bMatch.aId;
                 }
                 if (winnerId !== null) {
                   qualified = winnerId === userClId;
                 }
+              }
+
+              let penaltiesText = null;
+              if (hasVuelta && bMatch.penH !== null && bMatch.penH !== undefined && bMatch.penA !== null && bMatch.penA !== undefined) {
+                const penLeft = isVuelta ? bMatch.penA : bMatch.penH;
+                const penRight = isVuelta ? bMatch.penH : bMatch.penA;
+                penaltiesText = `(${penLeft}-${penRight} pen.)`;
               }
 
               aggregateInfo = {
@@ -181,7 +187,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 leftTotal,
                 rightTotal,
                 globalScoreText: hasVuelta ? `${globalLeft} - ${globalRight}` : `${bMatch.sh} - ${bMatch.sa}`,
-                penaltiesText: (bMatch.penH !== null && bMatch.penH !== undefined) ? `(${bMatch.penH}-${bMatch.penA} pen.)` : null,
+                penaltiesText,
                 qualified
               };
             }
@@ -1249,7 +1255,16 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
             className='space-y-4'
           >
             {safeBracket ? (
-              <div className='flex gap-4 overflow-x-auto pb-4 custom-scrollbar'>
+              <div className='space-y-2'>
+                <div className='flex items-center justify-between px-1 text-[8px] font-black uppercase text-slate-400'>
+                  <span className='flex items-center gap-1 text-blue-400'>
+                    <Trophy size={11} className='text-amber-400' /> Cuadro de Eliminatorias UEFA Champions League
+                  </span>
+                  <span className='flex items-center gap-1 text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10'>
+                    <span>← Desliza para explorar →</span>
+                  </span>
+                </div>
+                <div className='flex gap-4 overflow-x-auto pb-4 custom-scrollbar scroll-smooth -mx-1 px-1 touch-pan-x'>
                 {['Octavos', 'Cuartos', 'Semis', 'Final'].filter(p => safeBracket[p]).map(p => (
                   <div key={p} className='min-w-[280px] sm:min-w-[310px] flex-shrink-0 space-y-2.5'>
                     <div className='flex items-center justify-between bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 px-3.5 py-2 rounded-2xl border border-blue-500/30 shadow-md'>
@@ -1483,6 +1498,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                     </div>
                   </div>
                 ))}
+              </div>
               </div>
             ) : (
               <div className='bg-slate-900/60 rounded-3xl p-8 text-center space-y-2 border border-white/5'>

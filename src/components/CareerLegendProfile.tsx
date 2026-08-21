@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Trophy, Award, TrendingUp, CheckCircle, Flame, ChevronRight, X, Star, Calendar, Shield as ShieldIcon, Sparkles, Target, Trash2, Archive } from 'lucide-react';
+import { Trophy, Award, TrendingUp, CheckCircle, Flame, ChevronRight, X, Star, Calendar, Shield as ShieldIcon, Sparkles, Target, Trash2, Archive, ShieldAlert } from 'lucide-react';
 import { repBand, REPUTATION_BANDS } from '../lib/career';
 
 interface CareerLegendProfileProps {
@@ -25,6 +25,15 @@ export const CareerLegendProfile: React.FC<CareerLegendProfileProps> = ({
   pastCareersCount = 0
 }) => {
   const { Shield } = ui || {};
+
+  useEffect(() => {
+    if (!isModal || !onClose) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isModal, onClose]);
 
   const managerName = career.manager || 'Entrenador';
   const reputation = Math.max(0, Math.min(100, Math.round(((career.reputation ?? 10)) * 10) / 10));
@@ -63,7 +72,7 @@ export const CareerLegendProfile: React.FC<CareerLegendProfileProps> = ({
   const winRate = matches > 0 ? ((wins / matches) * 100).toFixed(1) : '0.0';
 
   // Trofeos
-  const trophies = career.trophies || { leagues: 0, champions: 0, promotions: 0 };
+  const trophies = career.trophies || { leagues: 0, champions: 0, uel: 0, promotions: 0 };
 
   // Historial cronológico de temporadas (más reciente arriba)
   const history = career.seasonHistory || [];
@@ -181,7 +190,7 @@ export const CareerLegendProfile: React.FC<CareerLegendProfileProps> = ({
         </div>
 
         {/* VITRINA DE TROFEOS */}
-        <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-3 gap-2 text-center">
+        <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
           <div className="bg-black/30 rounded-2xl p-2.5 border border-white/5">
             <Trophy size={18} className="text-yellow-400 mx-auto mb-1" />
             <p className="text-base font-black italic text-white tabular-nums">{trophies.leagues || 0}</p>
@@ -191,6 +200,11 @@ export const CareerLegendProfile: React.FC<CareerLegendProfileProps> = ({
             <Award size={18} className="text-blue-400 mx-auto mb-1" />
             <p className="text-base font-black italic text-white tabular-nums">{trophies.champions || 0}</p>
             <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Champions</p>
+          </div>
+          <div className="bg-black/30 rounded-2xl p-2.5 border border-white/5">
+            <Award size={18} className="text-amber-500 mx-auto mb-1" />
+            <p className="text-base font-black italic text-white tabular-nums">{trophies.uel || 0}</p>
+            <p className="text-[8px] font-black uppercase tracking-wider text-slate-400">Europa L.</p>
           </div>
           <div className="bg-black/30 rounded-2xl p-2.5 border border-white/5">
             <TrendingUp size={18} className="text-emerald-400 mx-auto mb-1" />

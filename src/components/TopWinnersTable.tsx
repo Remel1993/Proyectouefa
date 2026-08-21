@@ -1,23 +1,13 @@
 // @ts-nocheck
 import { Star, Trophy } from "lucide-react";
 import { useMemo, useSyncExternalStore } from "react";
-import { getTopWinners, subscribeTitles, type WinnerRow } from "@/lib/palmares";
+import { getTopWinners, subscribeTitles, getPalmaresVersion, type WinnerRow } from "@/lib/palmares";
 import { getCountryCode } from "@/lib/countries";
 
 const useTitlesVersion = () =>
   useSyncExternalStore(
     (cb) => subscribeTitles(cb),
-    () => {
-      try {
-        return typeof window === "undefined"
-          ? "0"
-          : (window.localStorage.getItem(
-              "dice-football-hub-elite-v6_palmares",
-            ) ?? "0");
-      } catch {
-        return "0";
-      }
-    },
+    () => getPalmaresVersion(),
     () => "0",
   );
 

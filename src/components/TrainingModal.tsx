@@ -53,6 +53,15 @@ export const TrainingModal: React.FC<TrainingModalProps> = ({
     }
   }, [isOpen, team?.att, team?.opp, team?.def]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Techos máximos respetando 5-5-4
   const caps = MAX_SQUAD_CAPS; // { att: 5, opp: 5, def: 4 }
   const effectiveMaxStrength = Math.max(14, maxLeagueStrength);
