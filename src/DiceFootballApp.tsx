@@ -23,7 +23,7 @@ import { SimulationInjuryAlertModal } from '@/components/SimulationInjuryAlertMo
 import {
   CAREER_LEAGUE_ID, CAREER_DIV, DEFAULT_CAREER, worstTeams, tierOf, tierCaps, peCostFor,
   peForResult, repForMatch, clampRep, objectiveFor, expectedPosition, readPerformance, buildOffers,
-  CONTRACT_SEASONS, CL_SPOTS, isSquadMaxed, clPhaseLabel, clProgressRep, fireChance, seasonObjectives,
+  CONTRACT_SEASONS, CL_SPOTS, isSquadMaxed, clPhaseLabel, clProgressRep, uelPhaseLabel, uelProgressRep, fireChance, seasonObjectives,
   remainingUpgradeCost, capPE, signingRepBonus, evaluateApplication, getMarketVacancies,
   SPECIAL_OFFICE_WEEKS, calculateCurrentSeasonWeek, getChampionsMatchKey, getEuropaLeagueMatchKey,
   roll1D6, simOpportunity, simPenalty, simMatchGoals, simPenaltyShootout
@@ -4124,9 +4124,11 @@ function DiceFootballApp() {
     }
     setSeasonState(s => {
       const nextGlobalMd = (s.globalMatchday || 1) + 1;
+      const expectedWeek = getWeekForLeagueMatchday(nextGlobalMd);
       return {
         ...s,
-        globalMatchday: nextGlobalMd
+        globalMatchday: nextGlobalMd,
+        currentWeek: Math.max(s.currentWeek || 1, expectedWeek)
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4541,13 +4543,14 @@ function DiceFootballApp() {
       trophies: {
         leagues: career.trophies?.leagues || 0,
         champions: career.trophies?.champions || 0,
+        uel: career.trophies?.uel || 0,
         promotions: career.trophies?.promotions || 0,
       },
       seasonHistory: [...(career.seasonHistory || [])],
       clParticipations: career.clParticipations || 0,
       hallOfFame: career.hallOfFame || false,
-      isChampion: (career.trophies?.leagues || 0) > 0 || (career.trophies?.champions || 0) > 0,
-      status: (career.trophies?.champions || 0) > 0 ? 'Leyenda Continental' : (career.trophies?.leagues || 0) > 0 ? 'Campeón de Liga' : 'Proyecto Finalizado'
+      isChampion: (career.trophies?.leagues || 0) > 0 || (career.trophies?.champions || 0) > 0 || (career.trophies?.uel || 0) > 0,
+      status: (career.trophies?.champions || 0) > 0 ? 'Leyenda de Champions' : (career.trophies?.uel || 0) > 0 ? 'Campeón Continental (UEL)' : (career.trophies?.leagues || 0) > 0 ? 'Campeón de Liga' : 'Proyecto Finalizado'
     };
 
     setPastCareers(prev => [archiveEntry, ...prev]);
@@ -5134,7 +5137,7 @@ function DiceFootballApp() {
           // Evaluación determinista al cabo de las 2 semanas
           const expPos = expectedPosition(currentTeams, career.teamId);
           const currentPerf = readPerformance(posAfter, expPos);
-          const hasRecentHistoryBonus = (c.trophies?.leagues || 0) > 0 || (c.trophies?.champions || 0) > 0 || (c.trophies?.promotions || 0) > 0;
+          const hasRecentHistoryBonus = (c.trophies?.leagues || 0) > 0 || (c.trophies?.champions || 0) > 0 || (c.trophies?.uel || 0) > 0 || (c.trophies?.promotions || 0) > 0;
 
           const evalRes = evaluateApplication({
             clubTier: updatedActiveApp.tier || 1,
@@ -5560,7 +5563,7 @@ function DiceFootballApp() {
         const topMilestone = milestoneFixtures[0];
         setMilestoneToast({
           title: topMilestone.ronda,
-          desc: topMilestone.descripcion || '',
+          desc: topMilestone.desc || topMilestone.title || '',
           week: currentWk
         });
       }
@@ -6253,9 +6256,10 @@ function DiceFootballApp() {
         ga: (c.stats?.ga || 0) + myGa
       };
 
+      const injuryHappened = injuryOccurredInSim || (c.activeInjury && c.activeInjury.matchKey === currentMatchKey);
       const resolvedImmunity = nextImmunityWeeks !== null && nextImmunityWeeks !== undefined
         ? nextImmunityWeeks
-        : injuryOccurredInSim
+        : injuryHappened
         ? 3
         : Math.max(0, (c.medicalImmunityWeeks || 0) - 1);
 
@@ -6697,9 +6701,10 @@ function DiceFootballApp() {
         ga: (c.stats?.ga || 0) + myGa
       };
 
+      const injuryHappened = injuryOccurredInSim || (c.activeInjury && c.activeInjury.matchKey === currentMatchKey);
       const resolvedImmunity = nextImmunityWeeks !== null && nextImmunityWeeks !== undefined
         ? nextImmunityWeeks
-        : injuryOccurredInSim
+        : injuryHappened
         ? 3
         : Math.max(0, (c.medicalImmunityWeeks || 0) - 1);
 
@@ -7029,11 +7034,11 @@ function DiceFootballApp() {
         const matchSa = isVuelta ? simH : simA;
         let penH: any = null, penA: any = null;
 
-        const isDraw = (isChampions && isVuelta && phase !== 'Final')
+        const isDraw = (isChampions && isVuelta && phase !== 'Final' && phase !== 'TercerPuesto')
           ? ((m.sh || 0) + matchSh === (m.sa || 0) + matchSa)
           : (matchSh === matchSa);
 
-        if (isDraw && (!isChampions || isVuelta || phase === 'Final')) {
+        if (isDraw && (!isChampions || isVuelta || phase === 'Final' || phase === 'TercerPuesto')) {
           const penShootout = simPenaltyShootout(h?.att || 1, a?.def || 1, a?.att || 1, h?.def || 1);
           penH = isVuelta ? penShootout.scoreA : penShootout.scoreH;
           penA = isVuelta ? penShootout.scoreH : penShootout.scoreA;
@@ -7241,31 +7246,54 @@ function DiceFootballApp() {
     const performance = readPerformance(position, expected);
     const objective = objectiveFor(career.tier || 1, position);
 
-    // ¿Cumplió los objetivos de temporada? (los tres objetivos base del club)
+    const isDroppedToUel = Boolean(
+      careerClInfo?.eliminated &&
+      careerUelInfo &&
+      !careerUelInfo.notQualified
+    );
+
+    // ¿Cumplió los objetivos de temporada? (los tres objetivos base del club + objetivo continental)
     const objectiveItems = seasonObjectives({
       tier: career.tier || 1, div: career.div, position, expected,
       wins: careerTeam.w || 0, draws: careerTeam.d || 0, played: careerTeam.p || 0,
       totalRounds: careerSchedule.length, reputation: career.reputation,
       total: careerTeams.length,
       clQualified: !!careerClInfo, clPhase: careerClInfo?.phase,
-      clChampion: !!careerClInfo?.champion, clEliminated: !!careerClInfo?.eliminated
+      clChampion: !!careerClInfo?.champion, clEliminated: !!careerClInfo?.eliminated,
+      uelQualified: !!careerUelInfo && !careerUelInfo.notQualified,
+      uelPhase: careerUelInfo?.phase,
+      uelChampion: !!careerUelInfo?.champion,
+      uelEliminated: !!careerUelInfo?.eliminated,
+      droppedToUel: isDroppedToUel
     });
     const coreObjectives = objectiveItems.filter(o => !o.extra);
     const objectivesMet = coreObjectives.filter(o => o.done).length;
 
-    // Recorrido europeo de ESTA temporada en la Champions global
+    // Recorrido continental de ESTA temporada (Champions League / Europa League)
     const clRep = clProgressRep({
       champion: !!careerClInfo?.champion,
       phaseReached: careerClInfo?.phase,
       played: !!careerClInfo
     });
-    const clResult = careerClInfo
+    const uelRep = uelProgressRep({
+      champion: !!careerUelInfo?.champion,
+      phaseReached: careerUelInfo?.phase,
+      played: !!careerUelInfo && !careerUelInfo.notQualified
+    });
+    const continentalRep = isDroppedToUel ? Math.max(clRep, uelRep) : (clRep + uelRep);
+    const clResult = careerClInfo && !isDroppedToUel
       ? (careerClInfo.champion
         ? '🏆 Campeón de la Champions'
         : careerClInfo.eliminated
           ? `Champions: eliminado en ${careerClInfo.phaseLabel}`
           : `Champions: ${careerClInfo.phaseLabel}`)
-      : null;
+      : careerUelInfo && !careerUelInfo.notQualified
+        ? (careerUelInfo.champion
+          ? '🏆 Campeón de la Europa League'
+          : careerUelInfo.eliminated
+            ? `Europa League: eliminado en ${uelPhaseLabel(careerUelInfo.phase)}`
+            : `Europa League: ${uelPhaseLabel(careerUelInfo.phase)}`)
+        : null;
 
     // Despido: más duro cuanto peor fue la temporada y la racha previa
     const chance = fireChance({
@@ -7274,7 +7302,7 @@ function DiceFootballApp() {
     });
     const fired = chance >= 1 || (chance > 0 && Math.random() < chance);
 
-    let repDelta = Math.round((objective.rep + performance.score * 2 + clRep) * 10) / 10;
+    let repDelta = Math.round((objective.rep + performance.score * 2 + continentalRep) * 10) / 10;
     
     // Reajuste de Final de Temporada (Especificación Técnica Élite):
     // Si el mánager tiene 90+ de reputación y no cumple el objetivo principal del club,
@@ -7332,6 +7360,9 @@ function DiceFootballApp() {
       if (review.fired && (career.originalTeamStats || careerTeam)) {
         setComps(prev => restoreClubOriginalStatsInComps(prev, career.originalTeamStats, careerTeam?.name));
       }
+      const isChampionsWinner = Boolean(review.clResult?.includes('Champions') && review.clResult?.includes('Campeón'));
+      const isUelWinner = Boolean(review.clResult?.includes('Europa League') && review.clResult?.includes('Campeón'));
+
       setCareer(c => ({
         ...c,
         reputation: review.repAfter,
@@ -7346,7 +7377,8 @@ function DiceFootballApp() {
         lastProcessedSeason: review.season,
         trophies: {
           leagues: (c.trophies?.leagues || 0) + (review.position === 1 ? 1 : 0),
-          champions: (c.trophies?.champions || 0) + (review.clResult?.includes('Campeón') ? 1 : 0),
+          champions: (c.trophies?.champions || 0) + (isChampionsWinner ? 1 : 0),
+          uel: (c.trophies?.uel || 0) + (isUelWinner ? 1 : 0),
           promotions: (c.trophies?.promotions || 0) + (c.div === 2 && review.position <= 3 ? 1 : 0)
         },
         seasonHistory: [
@@ -7359,7 +7391,8 @@ function DiceFootballApp() {
             clResult: review.clResult, promoted: c.div === 2 && review.position <= 3,
             fired: review.fired,
             isLeagueChampion: review.position === 1,
-            isClChampion: !!(review.clResult && review.clResult.includes('Campeón'))
+            isClChampion: isChampionsWinner,
+            isUelChampion: isUelWinner
           },
           ...(c.seasonHistory || [])
         ]
@@ -7381,10 +7414,25 @@ function DiceFootballApp() {
           season: review.season
         });
       }
-      if (review.clResult?.includes('Campeón') && careerTeam) {
+      if (isChampionsWinner && careerTeam) {
         registerTitle({
           compId: 'C1',
           compName: 'Champions League',
+          type: 'cup',
+          div: 1,
+          winner: {
+            name: careerTeam.name,
+            color1: careerTeam.color1,
+            color2: careerTeam.color2,
+            isFlag: careerTeam.isFlag
+          },
+          season: review.season
+        });
+      }
+      if (isUelWinner && careerTeam) {
+        registerTitle({
+          compId: 'C2',
+          compName: 'UEFA Europa League',
           type: 'cup',
           div: 1,
           winner: {
@@ -7502,7 +7550,7 @@ function DiceFootballApp() {
           const posIdx = sortedAfter.findIndex(t => t.id === c.teamId);
           const currentPos = posIdx >= 0 ? posIdx + 1 : expPos;
           const currentPerf = readPerformance(currentPos, expPos);
-          const hasRecentHistoryBonus = (c.trophies?.leagues || 0) > 0 || (c.trophies?.champions || 0) > 0 || (c.trophies?.promotions || 0) > 0;
+          const hasRecentHistoryBonus = (c.trophies?.leagues || 0) > 0 || (c.trophies?.champions || 0) > 0 || (c.trophies?.uel || 0) > 0 || (c.trophies?.promotions || 0) > 0;
 
           const evalRes = evaluateApplication({
             clubTier: updatedActiveApp.tier || 1,
@@ -7864,8 +7912,8 @@ function DiceFootballApp() {
              const a = currentComp.teams.find(t => t.id === (isVuelta ? m.hId : m.aId));
              const { sh: simH, sa: simA } = simMatchGoals(h?.opp, h?.att, a?.def, a?.opp, a?.att, h?.def);
              if (isVuelta) { sh = simA; sa = simH; } else { sh = simH; sa = simA; }
-             const isDraw = (isChampions && isVuelta && phase !== 'Final') ? (m.sh + sh === m.sa + sa) : (sh === sa);
-             if (isDraw && (!isChampions || isVuelta || phase === 'Final')) {
+             const isDraw = (isChampions && isVuelta && phase !== 'Final' && phase !== 'TercerPuesto') ? (m.sh + sh === m.sa + sa) : (sh === sa);
+             if (isDraw && (!isChampions || isVuelta || phase === 'Final' || phase === 'TercerPuesto')) {
                 const penShootout = simPenaltyShootout(h?.att || 1, a?.def || 1, a?.att || 1, h?.def || 1);
                 penH = isVuelta ? penShootout.scoreA : penShootout.scoreH;
                 penA = isVuelta ? penShootout.scoreH : penShootout.scoreA;
@@ -8202,8 +8250,12 @@ function DiceFootballApp() {
           <div className='space-y-4 w-full max-w-xs'>
             {!isLeague && (
               <button onClick={() => {
-                 const compsState = JSON.parse(window.localStorage.getItem(`${APP_ID}_comps`));
-                 updateActiveComp(getShuffleData(activeCompId, compsState));
+                 let compsState: any = null;
+                 try {
+                   const saved = window.localStorage.getItem(`${APP_ID}_comps`);
+                   if (saved) compsState = JSON.parse(saved);
+                 } catch (e) {}
+                 updateActiveComp(getShuffleData(activeCompId, compsState || comps || getDefaultComps()));
               }} className='w-full bg-emerald-600/80 backdrop-blur-md hover:bg-emerald-500 text-white py-4 rounded-2xl text-[11px] font-black uppercase italic tracking-widest shadow-xl transition-all active:scale-95 flex justify-center items-center gap-2'>
                 <Shuffle size={16}/> Sorteo Dinámico Oficial
               </button>
@@ -8214,7 +8266,7 @@ function DiceFootballApp() {
       );
     }
 
-    const sortedTeams = [...currentTeams].sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
+    const sortedTeams = [...currentTeams].sort((a, b) => ((b.pts || 0) - (a.pts || 0)) || (((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0))));
 
     const currentUserTeamId = isDiv2 ? (activeComp.userTeamId2 || activeComp.teams2?.[0]?.id) : activeComp.userTeamId;
     const userTeam = currentTeams.find(t => t.id === currentUserTeamId) || currentTeams[0];
@@ -8871,9 +8923,12 @@ function DiceFootballApp() {
                 )}
 
                 {championModalTab === 'bracket' && !isLeague && activeComp.bracket && (
-                  <div>
-                    <h3 className='text-sm font-black uppercase text-slate-200 mb-4 text-center'>Eliminatorias</h3>
-                    <div className='flex gap-4 overflow-x-auto custom-scrollbar pb-4'>
+                  <div className='space-y-2'>
+                    <div className='flex items-center justify-between px-1 text-[8px] font-black uppercase text-slate-400'>
+                      <span className='text-slate-200'>Cuadro Eliminatorio</span>
+                      <span className='bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10 text-slate-400'>← Desliza para explorar →</span>
+                    </div>
+                    <div className='flex gap-4 overflow-x-auto custom-scrollbar pb-4 scroll-smooth -mx-1 px-1 touch-pan-x'>
                       {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final'].filter(p => activeComp.bracket[p]).map(phase => {
                         const isChampions = activeCompId === 'C1' || activeCompId === 'C3';
                         const isTwoLegged = isChampions && phase !== 'Final';
@@ -9973,7 +10028,12 @@ function DiceFootballApp() {
         {!activeComp.bracket ? (
           <div className='text-center py-20 text-slate-300 font-black bg-slate-900/30 backdrop-blur-md rounded-[2rem] border border-white/10 uppercase italic text-[10px] shadow-lg'>Las eliminatorias se generarán al finalizar la fase de grupos.</div>
         ) : (
-          <div className='flex gap-4 overflow-x-auto custom-scrollbar pb-8'>
+          <div className='space-y-2'>
+            <div className='flex items-center justify-between px-1 text-[8px] font-black uppercase text-slate-400'>
+              <span>Rondas Eliminatorias</span>
+              <span className='bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10 text-slate-400'>← Desliza horizontalmente para explorar →</span>
+            </div>
+            <div className='flex gap-4 overflow-x-auto custom-scrollbar pb-8 scroll-smooth -mx-1 px-1 touch-pan-x'>
             {['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'TercerPuesto', 'Final'].filter(p => activeComp.bracket[p]).map(phase => {
               const isChampions = activeCompId === 'C1' || activeCompId === 'C3';
               const isTwoLegged = isChampions && phase !== 'Final' && phase !== 'TercerPuesto';
@@ -10087,6 +10147,7 @@ function DiceFootballApp() {
                 </div>
               );
             })}
+          </div>
           </div>
         )}
       </div>
