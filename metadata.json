@@ -1,6 +1,6 @@
 {
   "name": "SimulaciónHub - Dice Football",
-  "description": "Dice-based football simulation game with league management, career mode, and team customization.",
+  "description": "Simulación de fútbol con dados, ligas, modo carrera y torneos europeos e internacionales.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
