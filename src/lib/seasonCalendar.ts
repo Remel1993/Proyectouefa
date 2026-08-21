@@ -1083,3 +1083,20 @@ export const getNextEuropaLeagueMatchWeek = (currentWeek: number): number | null
   const next = EUROPA_LEAGUE_MATCH_WEEKS.find(w => w >= currentWeek);
   return next || (currentWeek >= 39 ? null : 39);
 };
+
+export const getExpectedCupMatchdayForWeek = (compId: string, week: number): number | null => {
+  if (compId === 'C1') {
+    const clMap: Record<number, number> = {
+      7: 1, 9: 2, 11: 3, 14: 4, 16: 5, 18: 6,
+      25: 7, 27: 8, 30: 9, 32: 10, 34: 11, 36: 12, 41: 13
+    };
+    return clMap[week] ?? null;
+  }
+  if (compId === 'C3') {
+    const uelMap: Record<number, number> = {
+      22: 1, 23: 2, 25: 3, 27: 4, 30: 5, 32: 6, 34: 7, 36: 8, 39: 9
+    };
+    return uelMap[week] ?? null;
+  }
+  return null;
+};

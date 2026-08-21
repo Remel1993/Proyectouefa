@@ -1679,3 +1679,11 @@ export const generateLeagueSchedule = (teams: any[], twoLegged: boolean = true) 
 export const getChampionsMatchKey = (season: number = 1, phase: string = 'groups', matchday: number = 0) => {
   return `cl-${season}-${phase}-${matchday}`;
 };
+
+/**
+ * Generador de clave única para una jornada / eliminatoria de Europa League
+ */
+export const getEuropaLeagueMatchKey = (season: number = 1, phase: string = 'Dieciseisavos', matchday: number = 0) => {
+  return `uel-${season}-${phase}-${matchday}`;
+};
+
