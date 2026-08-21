@@ -316,8 +316,10 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
   }, [career.season, career.clSeason, clComp?.phase, clComp?.matchday, clComp?.season]);
 
   const hasTrainedThisClMatch = useMemo(() => {
-    return career.trainedMatchKey === clMatchKey || career.trainedClMatchKey === clMatchKey;
-  }, [career.trainedMatchKey, career.trainedClMatchKey, clMatchKey]);
+    return career.trainedMatchKey === clMatchKey ||
+      career.trainedClMatchKey === clMatchKey ||
+      (Boolean(currentWeek) && career.trainedWeek === currentWeek);
+  }, [career.trainedMatchKey, career.trainedClMatchKey, career.trainedWeek, clMatchKey, currentWeek]);
 
   // Determinar si el club fue campeón de Champions
   const isChampion = useMemo(() => {

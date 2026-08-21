@@ -432,12 +432,12 @@ export const CareerView = ({
   // La Champions del modo carrera ES la Champions global ('C1') sincronizada
   const cl = clInfo;
   const isClQualified = useMemo(() => {
-    if (clInfo || career.clQualified) return true;
-    if (clComp?.teams?.length > 0) {
-      return clComp.teams.some((t: any) => t.id === clComp.careerTeamId || t.name === (clComp.careerTeamName || team?.name));
-    }
+    if (career.clQualified) return true;
+    if (clComp?.careerTeamId && clComp.careerTeamId === career.teamId) return true;
+    if (clComp?.careerTeamName && team?.name && clComp.careerTeamName === team.name) return true;
+    if (clInfo && !clInfo.notQualified && clInfo.alive) return true;
     return false;
-  }, [clInfo, career.clQualified, clComp, team]);
+  }, [clInfo, career.clQualified, career.teamId, clComp, team]);
 
   const clPhaseText = (championsFinished || clComp?.phase === 'Terminado' || clComp?.showWinner)
     ? 'Finalizada'
@@ -457,12 +457,12 @@ export const CareerView = ({
 
   // La Europa League del modo carrera sincronizada con C3
   const isUelQualified = useMemo(() => {
-    if (uelInfo || career.uelQualified) return true;
-    if (uelComp?.teams?.length > 0) {
-      return uelComp.teams.some((t: any) => t.id === uelComp.careerTeamId || t.name === (uelComp.careerTeamName || team?.name) || t.id === uelComp.userTeamId);
-    }
+    if (career.uelQualified) return true;
+    if (uelComp?.careerTeamId && uelComp.careerTeamId === career.teamId) return true;
+    if (uelComp?.careerTeamName && team?.name && uelComp.careerTeamName === team.name) return true;
+    if (uelInfo && !uelInfo.notQualified && uelInfo.alive) return true;
     return false;
-  }, [uelInfo, career.uelQualified, uelComp, team]);
+  }, [uelInfo, career.uelQualified, career.teamId, uelComp, team]);
 
   const uelPhaseText = (uelComp?.phase === 'Terminado' || uelComp?.showWinner)
     ? 'Finalizada'
@@ -672,9 +672,11 @@ export const CareerView = ({
     }
 
     // Identificar el equipo del modo carrera en Champions (C1)
-    const careerClTeam = clTeams.find((t: any) => t.id === clComp?.careerTeamId) ||
-      clTeams.find((t: any) => t.name === (clComp?.careerTeamName || team?.name)) || null;
-    const isUserInCl = isClQualified || !!careerClTeam;
+    const careerClTeam = isClQualified ? (
+      clTeams.find((t: any) => t.id === clComp?.careerTeamId) ||
+      clTeams.find((t: any) => t.name === (clComp?.careerTeamName || team?.name)) || null
+    ) : null;
+    const isUserInCl = isClQualified && !!careerClTeam;
 
     // Buscar historial cronológico de partidos de Champions jugados por el usuario
     const userClHistoryMatches: any[] = [];
@@ -1208,7 +1210,7 @@ export const CareerView = ({
             badge={!isChampionsDate ? `Sem. ${nextClWeek || 7}` : clPhaseText}
           />
         )}
-        {(isUelQualified || (uelComp?.teams && uelComp.teams.length > 0) || tab === 'uel') && (
+        {isUelQualified && (
           <TabButton
             active={tab === 'uel'}
             onClick={() => setTab('uel')}
@@ -1411,8 +1413,8 @@ export const CareerView = ({
                   )}
 
                   <div className='space-y-2 pt-1'>
-                    {/* Botón de Sorteo de Champions League en Semana de Sorteo (Semana 2 o 20) */}
-                    {isClDrawWeek && !championsFinished && (
+                    {/* Botón de Sorteo de Champions League en Semana de Sorteo (Semana 2 o 20) sólo si el club entró en Champions */}
+                    {isClDrawWeek && isClQualified && !championsFinished && (
                       <button
                         onClick={() => {
                           if (careerCurrentWeek === 20 && onPerformKnockoutDraw) {
@@ -1431,59 +1433,55 @@ export const CareerView = ({
                       </button>
                     )}
 
-                    {/* Botón directo de Champions League cuando el equipo está clasificado o en disputa */}
+                    {/* Botón directo de Champions League sólo cuando el equipo está clasificado */}
                     {isClQualified && !championsFinished && !isClDrawWeek && (
-                      <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
-                        <button
-                          onClick={() => {
-                            if (isChampionsDate) {
-                              if (!allLeaguesFinished && !championsFinished && onOpenChampions) {
-                                onOpenChampions();
-                              }
-                              setTab('cl');
-                            }
-                          }}
-                          disabled={!isChampionsDate}
-                          className={`w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border ${
-                            isChampionsDate
-                              ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400/40 active:scale-95 shadow-md cursor-pointer'
-                              : 'bg-slate-900/40 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
-                          }`}
-                        >
-                          {!isChampionsDate ? <Lock size={15} className='text-amber-400' /> : <Trophy size={16} className='text-amber-300' />}
-                          <span>{isChampionsDate ? 'Jugar Champions League' : `Bloqueado (Semana ${nextClWeek || 7})`}</span>
-                        </button>
-                        {onSimulateAllChampions && (
+                      <div className='space-y-1.5'>
+                        <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
                           <button
-                            onClick={isChampionsDate ? onSimulateAllChampions : undefined}
+                            onClick={() => {
+                              if (isChampionsDate) {
+                                if (onPlayChampionsMatch) {
+                                  onPlayChampionsMatch();
+                                } else {
+                                  if (onOpenChampions) onOpenChampions();
+                                  setTab('cl');
+                                }
+                              }
+                            }}
                             disabled={!isChampionsDate}
                             className={`w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border ${
                               isChampionsDate
-                                ? 'bg-blue-700 hover:bg-blue-600 text-white border-blue-400/30 active:scale-95 shadow-md cursor-pointer'
-                                : 'bg-slate-900/30 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
+                                ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400/40 active:scale-95 shadow-md cursor-pointer'
+                                : 'bg-slate-900/40 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
                             }`}
                           >
-                            {!isChampionsDate ? <Lock size={15} className='text-amber-400' /> : <Dices size={16} className='text-blue-200' />}
-                            <span>{isChampionsDate ? 'Simular Champions' : `Bloqueado (${nextClWeek || 7})`}</span>
+                            {!isChampionsDate ? <Lock size={15} className='text-amber-400' /> : <Swords size={16} className='text-amber-300' />}
+                            <span>{isChampionsDate ? 'Jugar UCL (Dados)' : `Bloqueado (Semana ${nextClWeek || 7})`}</span>
+                          </button>
+                          {(onSimulateChampionsMatch || onSimulateAllChampions) && (
+                            <button
+                              onClick={isChampionsDate ? (onSimulateChampionsMatch || onSimulateAllChampions) : undefined}
+                              disabled={!isChampionsDate}
+                              className={`w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border ${
+                                isChampionsDate
+                                  ? 'bg-blue-700 hover:bg-blue-600 text-white border-blue-400/30 active:scale-95 shadow-md cursor-pointer'
+                                  : 'bg-slate-900/30 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
+                              }`}
+                            >
+                              {!isChampionsDate ? <Lock size={15} className='text-amber-400' /> : <Dices size={16} className='text-blue-200' />}
+                              <span>{isChampionsDate ? 'Simular UCL' : `Bloqueado (${nextClWeek || 7})`}</span>
+                            </button>
+                          )}
+                        </div>
+                        {isChampionsDate && (
+                          <button
+                            onClick={() => setTab('cl')}
+                            className='w-full py-2 rounded-xl text-[8.5px] font-black uppercase tracking-wider bg-blue-950/40 hover:bg-blue-900/50 text-blue-300 border border-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                          >
+                            <Trophy size={12} className='text-amber-400' /> Ver Hub de Champions League
                           </button>
                         )}
                       </div>
-                    )}
-
-                    {/* Si no está clasificado a Champions pero la Champions europea sigue pendiente */}
-                    {!isClQualified && !championsFinished && !isClDrawWeek && onSimulateAllChampions && (
-                      <button
-                        onClick={isChampionsDate ? onSimulateAllChampions : undefined}
-                        disabled={!isChampionsDate}
-                        className={`w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border ${
-                          isChampionsDate
-                            ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400/40 active:scale-95 shadow-md cursor-pointer'
-                            : 'bg-slate-900/40 text-slate-500 border-slate-800 cursor-not-allowed opacity-60'
-                        }`}
-                      >
-                        {!isChampionsDate ? <Lock size={15} className='text-amber-400' /> : <Trophy size={16} className='text-amber-300' />}
-                        <span>{isChampionsDate ? 'Simular Champions League' : `Bloqueado hasta Semana ${nextClWeek || 7}`}</span>
-                      </button>
                     )}
 
                     {/* Ver Champions ya finalizada si está clasificado */}
@@ -1497,30 +1495,42 @@ export const CareerView = ({
                       </button>
                     )}
 
-                    {/* Botones de UEFA Europa League */}
+                    {/* Botones de UEFA Europa League sólo si el club entró en Europa League */}
                     {isUelQualified && (
                       <div className='pt-1'>
                         {isEuropaDate ? (
-                          <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
-                            <button
-                              onClick={() => {
-                                if (onOpenUel) onOpenUel();
-                                setTab('uel');
-                              }}
-                              className='w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-500 hover:to-orange-600 text-white border-amber-400/40 active:scale-95 shadow-md cursor-pointer'
-                            >
-                              <Flame size={16} className='text-amber-300' />
-                              <span>Jugar Europa League</span>
-                            </button>
-                            {onSimulateAllUel && (
+                          <div className='space-y-1.5'>
+                            <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
                               <button
-                                onClick={onSimulateAllUel}
-                                className='w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/30 active:scale-95 shadow-md cursor-pointer'
+                                onClick={() => {
+                                  if (onPlayUelMatch) {
+                                    onPlayUelMatch();
+                                  } else {
+                                    if (onOpenUel) onOpenUel();
+                                    setTab('uel');
+                                  }
+                                }}
+                                className='w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border bg-gradient-to-r from-amber-600 to-orange-700 hover:from-amber-500 hover:to-orange-600 text-white border-amber-400/40 active:scale-95 shadow-md cursor-pointer'
                               >
-                                <Dices size={16} className='text-amber-400' />
-                                <span>Simular Europa League</span>
+                                <Swords size={16} className='text-amber-300' />
+                                <span>Jugar UEL (Dados)</span>
                               </button>
-                            )}
+                              {(onSimulateUelMatch || onSimulateAllUel) && (
+                                <button
+                                  onClick={onSimulateUelMatch || onSimulateAllUel}
+                                  className='w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/30 active:scale-95 shadow-md cursor-pointer'
+                                >
+                                  <Dices size={16} className='text-amber-400' />
+                                  <span>Simular Europa League</span>
+                                </button>
+                              )}
+                            </div>
+                            <button
+                              onClick={() => setTab('uel')}
+                              className='w-full py-2 rounded-xl text-[8.5px] font-black uppercase tracking-wider bg-amber-950/40 hover:bg-amber-900/50 text-amber-300 border border-amber-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                            >
+                              <Flame size={12} className='text-amber-400' /> Ver Hub de Europa League
+                            </button>
                           </div>
                         ) : (
                           <button
@@ -1758,19 +1768,205 @@ export const CareerView = ({
                   <div className='grid grid-cols-2 gap-2 mt-4'>
                     <button
                       onClick={onPlayMatch}
-                      className='bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5'
+                      className='bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
                     >
                       <Swords size={15} /> Jugar Partido
                     </button>
                     <button
                       onClick={onSimulateMatch}
-                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30'
+                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30 cursor-pointer'
                     >
                       <FastForward size={15} /> Simular Semana
                     </button>
                   </div>
                 </Panel>
-              ) : null}
+              ) : isChampionsDate && isClQualified && clInfo?.alive && !clInfo?.champion ? (
+                <Panel className='p-5 border-blue-500/30 bg-gradient-to-br from-slate-900/90 via-blue-950/40 to-slate-900/90'>
+                  <div className='flex items-center justify-between mb-2'>
+                    <p className='text-[9px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-1.5'>
+                      <Trophy size={13} className='text-amber-400' /> UEFA Champions League · {clInfo?.phaseLabel || 'Fase Continental'}
+                    </p>
+                    <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-200 border border-blue-400/30'>
+                      Semana {careerCurrentWeek} de 42
+                    </span>
+                  </div>
+                  <div className='mt-3 bg-black/40 rounded-2xl p-4 border border-blue-500/20 text-center space-y-2'>
+                    <p className='text-[9px] font-black uppercase tracking-wider text-slate-300'>Compromiso Europeo</p>
+                    <p className='text-base font-black italic text-white'>
+                      {team?.name} <span className='text-blue-400'>vs</span> {clInfo?.rivalName || 'Rival Europeo'}
+                    </p>
+                    <p className='text-[9px] font-bold text-slate-300'>
+                      {clInfo?.groupName ? `Grupo ${clInfo.groupName} · Jornada de Grupos` : `Eliminatoria Directa · ${clInfo?.phaseLabel}`}
+                    </p>
+                  </div>
+                  <div className='grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4'>
+                    <button
+                      onClick={onPlayChampionsMatch}
+                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                    >
+                      <Swords size={14} /> Jugar UCL
+                    </button>
+                    <button
+                      onClick={onSimulateChampionsMatch}
+                      className='bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
+                    >
+                      <Dices size={14} className='text-amber-400' /> Simular UCL
+                    </button>
+                    <button
+                      onClick={() => setTab('cl')}
+                      className='bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 hover:text-blue-100 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-500/30 cursor-pointer'
+                    >
+                      <Trophy size={14} /> Ver Hub UCL
+                    </button>
+                  </div>
+                </Panel>
+              ) : isEuropaDate && isUelQualified && uelInfo?.alive && !uelInfo?.champion ? (
+                <Panel className='p-5 border-amber-500/30 bg-gradient-to-br from-slate-900/90 via-amber-950/30 to-slate-900/90'>
+                  <div className='flex items-center justify-between mb-2'>
+                    <p className='text-[9px] font-black uppercase tracking-widest text-amber-400 flex items-center gap-1.5'>
+                      <Flame size={13} className='text-amber-400' /> UEFA Europa League · {uelPhaseLabel(uelComp?.phase)}
+                    </p>
+                    <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-900/60 text-amber-200 border border-amber-400/30'>
+                      Semana {careerCurrentWeek} de 42
+                    </span>
+                  </div>
+                  <div className='mt-3 bg-black/40 rounded-2xl p-4 border border-amber-500/20 text-center space-y-2'>
+                    <p className='text-[9px] font-black uppercase tracking-wider text-slate-300'>Compromiso de Europa League</p>
+                    <p className='text-base font-black italic text-white'>
+                      {team?.name} <span className='text-amber-400'>vs</span> {uelInfo?.rivalName || 'Rival Europeo'}
+                    </p>
+                    <p className='text-[9px] font-bold text-slate-300'>
+                      Eliminatoria Directa · {uelPhaseLabel(uelComp?.phase)}
+                    </p>
+                  </div>
+                  <div className='grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4'>
+                    <button
+                      onClick={onPlayUelMatch || onOpenUel}
+                      className='bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer font-black'
+                    >
+                      <Swords size={14} /> Jugar UEL
+                    </button>
+                    <button
+                      onClick={onSimulateUelMatch}
+                      className='bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
+                    >
+                      <Dices size={14} className='text-amber-400' /> Simular UEL
+                    </button>
+                    <button
+                      onClick={() => setTab('uel')}
+                      className='bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 hover:text-amber-100 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-amber-500/30 cursor-pointer'
+                    >
+                      <Flame size={14} /> Ver Hub UEL
+                    </button>
+                  </div>
+                </Panel>
+              ) : (careerCurrentWeek >= 42 || (allLeaguesFinished && championsFinished)) ? (
+                <Panel className='p-5 border-amber-500/30 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-amber-950/30 text-center space-y-4'>
+                  <div className='w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center mx-auto'>
+                    <Trophy size={24} />
+                  </div>
+                  <div>
+                    <h3 className='text-sm font-black uppercase italic tracking-wider text-white'>
+                      Temporada {seasonState?.season || 1} Finalizada
+                    </h3>
+                    <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
+                      {contractSigned || reviewDone
+                        ? `Has completado el calendario oficial de 42 semanas y tu contrato ha quedado regularizado para la Temporada ${(seasonState?.season || 1) + 1}.`
+                        : 'Has completado el calendario oficial de 42 semanas. Revisa la evaluación directiva, evalúa los objetivos cumplidos y tramita tu renovación o nuevo club.'}
+                    </p>
+                  </div>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
+                    <button
+                      onClick={onNewSeason}
+                      className='bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 font-black cursor-pointer'
+                    >
+                      <RotateCcw size={15} /> Iniciar Temporada {(seasonState?.season || 1) + 1}
+                    </button>
+                    <button
+                      onClick={onOpenReview}
+                      className='bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
+                    >
+                      <Award size={15} /> {contractSigned || reviewDone ? 'Ver Balance de Temporada' : 'Balance de Temporada & Contratos'}
+                    </button>
+                  </div>
+                </Panel>
+              ) : divisionFinished ? (
+                <Panel className='p-5 border-amber-500/30 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-amber-950/30 text-center space-y-4'>
+                  <div className='w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center mx-auto'>
+                    <Trophy size={24} />
+                  </div>
+                  <div>
+                    <h3 className='text-sm font-black uppercase italic tracking-wider text-white'>
+                      Temporada Liguera Concluida
+                    </h3>
+                    <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
+                      Has completado todas las jornadas de tu campeonato doméstico. Puedes simular el resto de ligas y copas europeas para avanzar al balance final y contratos de la siguiente temporada.
+                    </p>
+                  </div>
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
+                    <button
+                      onClick={onSimulateMatch}
+                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30 cursor-pointer'
+                    >
+                      <FastForward size={15} /> Simular Semana {careerCurrentWeek}
+                    </button>
+                    <button
+                      onClick={onOpenReview}
+                      className='bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                    >
+                      <Award size={15} /> Balance de Temporada
+                    </button>
+                  </div>
+                </Panel>
+              ) : (
+                <Panel className='p-5 border-slate-700/60 bg-gradient-to-br from-slate-900/90 to-slate-950/90 space-y-4'>
+                  <div className='flex items-center justify-between'>
+                    <div className='flex items-center gap-2'>
+                      <div className='w-8 h-8 rounded-xl bg-slate-800 text-amber-400 flex items-center justify-center border border-white/10 shrink-0'>
+                        <Calendar size={16} />
+                      </div>
+                      <div>
+                        <p className='text-[9px] font-black uppercase tracking-widest text-amber-400'>
+                          Semana {careerCurrentWeek} de 42
+                        </p>
+                        <p className='text-[10px] font-bold text-slate-200'>
+                          Ventana de Gestión y Preparación Física
+                        </p>
+                      </div>
+                    </div>
+                    <span className='px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-white/10 text-[8px] font-black uppercase tracking-wider shrink-0'>
+                      Sin Partido de Liga
+                    </span>
+                  </div>
+
+                  <p className='text-[9px] font-bold text-slate-300 leading-snug'>
+                    Esta semana no hay jornada de liga para tu club debido al calendario europeo o parón de selecciones. Aprovecha para ajustar la táctica, entrenar la plantilla o simular la semana para continuar el curso.
+                  </p>
+
+                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
+                    <button
+                      onClick={onSimulateMatch}
+                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30 cursor-pointer'
+                    >
+                      <FastForward size={15} /> Simular / Avanzar Semana
+                    </button>
+                    <div className='flex gap-2'>
+                      <button
+                        onClick={() => setShowDrillModal(true)}
+                        className='flex-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1 border border-amber-500/40 cursor-pointer'
+                      >
+                        <Dices size={14} /> Entreno 1D6
+                      </button>
+                      <button
+                        onClick={() => setTab('jobs')}
+                        className='flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1 border border-white/10 cursor-pointer'
+                      >
+                        <Briefcase size={14} /> Empleo
+                      </button>
+                    </div>
+                  </div>
+                </Panel>
+              )}
 
               {/* PANEL RESUMIDO DE OBJETIVOS Y CONFIANZA DIRECTIVA EN VISTA PRINCIPAL */}
               <Panel className='p-5 space-y-4 border-amber-500/20 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-amber-950/20'>

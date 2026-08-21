@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award, CheckCircle, CheckCircle2, XCircle, Clock, Sparkles, Layers, ArrowLeft, RotateCcw, ShieldCheck, Dumbbell, Target, Globe, Flame, Lock, Swords } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { tacticalOptions, sameDist } from '../lib/career';
+import { tacticalOptions, sameDist, getEuropaLeagueMatchKey } from '../lib/career';
 
 export const uelPhaseLabel = (phase?: string) => {
   if (!phase) return 'Dieciseisavos';
@@ -98,6 +98,20 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
   const totalTeamStrength = baseTactic.att + baseTactic.opp + baseTactic.def;
   const currentTier = career?.tier || team?.tier || 1;
   const tacticOptionsList = useMemo(() => tacticalOptions(baseTactic, currentTier), [baseTactic, currentTier]);
+
+  // Clave de partido de Europa League para independizar entrenamiento por jornada
+  const uelMatchKey = useMemo(() => {
+    const s = career?.uelSeason || uelComp?.season || career?.season || 1;
+    const p = uelComp?.phase || 'Dieciseisavos';
+    const md = uelComp?.matchday || 0;
+    return getEuropaLeagueMatchKey(s, p, md);
+  }, [career?.season, career?.uelSeason, uelComp?.phase, uelComp?.matchday, uelComp?.season]);
+
+  const hasTrainedThisUelMatch = useMemo(() => {
+    return career?.trainedMatchKey === uelMatchKey ||
+      career?.trainedUelMatchKey === uelMatchKey ||
+      (Boolean(currentWeek) && career?.trainedWeek === currentWeek);
+  }, [career?.trainedMatchKey, career?.trainedUelMatchKey, career?.trainedWeek, uelMatchKey, currentWeek]);
 
   // Determinar si el club no clasificó a UEFA Europa League esta temporada
   const isNotQualified = useMemo(() => {
@@ -498,7 +512,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                         onClick={onPlayUelMatch}
                         className='py-3.5 font-black uppercase italic text-[11px] tracking-widest rounded-2xl transition-all flex items-center justify-center gap-2 border bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 shadow-xl active:scale-95 border-amber-300/40 cursor-pointer'
                       >
-                        <Dices size={16} />
+                        <Swords size={16} />
                         <span>Jugar Partido</span>
                       </button>
 
@@ -516,9 +530,15 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                       {onOpenDrill && (
                         <button
                           onClick={onOpenDrill}
-                          className='py-2 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-[8px] font-black uppercase italic tracking-wider border border-white/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all'
+                          disabled={hasTrainedThisUelMatch}
+                          className={`py-2 rounded-xl text-[8px] font-black uppercase italic tracking-wider border flex items-center justify-center gap-1.5 active:scale-95 transition-all ${
+                            hasTrainedThisUelMatch
+                              ? 'bg-slate-900/40 border-white/5 text-slate-500 cursor-not-allowed opacity-60'
+                              : 'bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white border-white/10'
+                          }`}
                         >
-                          <Dumbbell size={11} className='text-amber-400' /> Minijuego Pre-Partido
+                          <Dumbbell size={11} className={hasTrainedThisUelMatch ? 'text-slate-500' : 'text-amber-400'} />
+                          <span>{hasTrainedThisUelMatch ? 'Sesión Hecha (1D6)' : 'Entreno 1D6'}</span>
                         </button>
                       )}
 
@@ -527,7 +547,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                           onClick={onOpenTraining}
                           className='py-2 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-[8px] font-black uppercase italic tracking-wider border border-white/10 flex items-center justify-center gap-1.5 active:scale-95 transition-all'
                         >
-                          <Zap size={11} className='text-orange-400' /> Sesión de Entrenamiento
+                          <Zap size={11} className='text-orange-400' /> PE ({career?.pe || 0})
                         </button>
                       )}
                     </div>
