@@ -341,13 +341,22 @@ export const getContractObjectivesForTeam = ({
 };
 
 export const seasonObjectives = ({
-  tier, div, position, expected, wins = 0, draws = 0, played = 0, totalRounds = 0,
-  reputation = 10, pe = 0, total = 20, clQualified = false, clPhase = null, clChampion = false, clEliminated = false,
+  tier = 1, div = 1, position = null, expected = 10, wins = 0, draws = 0, played = 0, totalRounds = 0,
+  reputation = 10, pe = 0, total = 20,
+  clQualified = false, clPhase = null, clChampion = false, clEliminated = false,
+  droppedToUel = false, uelQualified = false, uelPhase = null, uelChampion = false, uelEliminated = false,
   career = null, compId = null
 }: any = {}) => {
   const size = total || 20;
   const exp = Math.max(1, Math.min(size, expected || Math.ceil(size / 2)));
   const rounds = totalRounds || Math.max(played, (size - 1) * 2);
+
+  // Derivaciones seguras para UEL/Champions
+  const isDroppedToUel = droppedToUel ?? career?.droppedToUel ?? false;
+  const isUelQualified = uelQualified ?? career?.uelQualified ?? false;
+  const currentUelPhase = uelPhase ?? career?.uelPhase ?? null;
+  const isUelChampion = uelChampion ?? career?.uelChampion ?? false;
+  const isUelEliminated = uelEliminated ?? career?.uelEliminated ?? false;
 
   // 1) Posición de liga: adaptada a la realidad del club
   let posTarget: number;
@@ -529,7 +538,7 @@ export const seasonObjectives = ({
   ];
 
   // 5) Objetivo Continental (UEFA Champions League o reclasificación a UEFA Europa League)
-  if (clQualified && !droppedToUel) {
+  if (clQualified && !isDroppedToUel) {
     const clTarget = getChampionsObjectiveTarget(tier);
     const targetRank = CL_PHASE_ORDER.indexOf(clTarget.targetPhase);
     const currentRank = CL_PHASE_ORDER.indexOf(clPhase || 'groups');
@@ -591,22 +600,22 @@ export const seasonObjectives = ({
       rewardPe: clTarget.pe,
       rewardRep: clTarget.rep
     });
-  } else if (droppedToUel || (uelQualified && !clQualified)) {
-    const uelTarget = getEuropaLeagueObjectiveTarget(tier, droppedToUel);
+  } else if (isDroppedToUel || (isUelQualified && !clQualified)) {
+    const uelTarget = getEuropaLeagueObjectiveTarget(tier, isDroppedToUel);
     const targetRank = UEL_PHASE_ORDER.indexOf(uelTarget.targetPhase);
-    const currentRank = UEL_PHASE_ORDER.indexOf(uelPhase || 'Dieciseisavos');
+    const currentRank = UEL_PHASE_ORDER.indexOf(currentUelPhase || 'Dieciseisavos');
 
     let uelDone = false;
     let uelProgress = 25;
     let uelStatus: 'completed' | 'on_track' | 'at_risk' | 'failed' = 'on_track';
     let uelStatusLabel = 'En Carrera (UEL)';
 
-    if (uelChampion) {
+    if (isUelChampion) {
       uelDone = true;
       uelProgress = 100;
       uelStatus = 'completed';
       uelStatusLabel = '🏆 ¡Campeón de Europa League!';
-    } else if (uelEliminated) {
+    } else if (isUelEliminated) {
       if (currentRank >= targetRank) {
         uelDone = true;
         uelProgress = 100;
@@ -628,24 +637,24 @@ export const seasonObjectives = ({
         uelDone = false;
         uelProgress = Math.max(25, Math.min(90, Math.round(((currentRank + 1) / (targetRank + 1)) * 90)));
         uelStatus = 'on_track';
-        uelStatusLabel = `En ${uelPhaseLabel(uelPhase)}`;
+        uelStatusLabel = `En ${uelPhaseLabel(currentUelPhase)}`;
       }
     }
 
     items.push({
-      key: droppedToUel ? 'europaLeagueRepescado' : 'europaLeague',
+      key: isDroppedToUel ? 'europaLeagueRepescado' : 'europaLeague',
       category: 'Continental',
       priority: tier >= 4 ? 'Muy Alta' : 'Alta',
       extra: false,
       label: uelTarget.label,
-      detail: uelChampion
+      detail: isUelChampion
         ? '🏆 ¡Hito continental: Campeón de la UEFA Europa League!'
-        : uelEliminated
-          ? `Eliminado en ${uelPhaseLabel(uelPhase)} (Exigencia: ${uelTarget.targetValue})`
-          : `${uelTarget.detail} · Fase actual: ${uelPhaseLabel(uelPhase)}`,
+        : isUelEliminated
+          ? `Eliminado en ${uelPhaseLabel(currentUelPhase)} (Exigencia: ${uelTarget.targetValue})`
+          : `${uelTarget.detail} · Fase actual: ${uelPhaseLabel(currentUelPhase)}`,
       done: uelDone,
       progress: uelProgress,
-      currentValue: uelChampion ? 'Campeón UEL' : uelEliminated ? `Eliminado (${uelPhaseLabel(uelPhase)})` : uelPhaseLabel(uelPhase),
+      currentValue: isUelChampion ? 'Campeón UEL' : isUelEliminated ? `Eliminado (${uelPhaseLabel(currentUelPhase)})` : uelPhaseLabel(currentUelPhase),
       targetValue: uelTarget.targetValue,
       status: uelStatus,
       statusLabel: uelStatusLabel,
