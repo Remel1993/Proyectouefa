@@ -25,7 +25,7 @@ import {
   peForResult, repForMatch, clampRep, objectiveFor, expectedPosition, readPerformance, buildOffers,
   CONTRACT_SEASONS, CL_SPOTS, isSquadMaxed, clPhaseLabel, clProgressRep, fireChance, seasonObjectives,
   remainingUpgradeCost, capPE, signingRepBonus, evaluateApplication, getMarketVacancies,
-  SPECIAL_OFFICE_WEEKS, calculateCurrentSeasonWeek, getChampionsMatchKey,
+  SPECIAL_OFFICE_WEEKS, calculateCurrentSeasonWeek, getChampionsMatchKey, getEuropaLeagueMatchKey,
   roll1D6, simOpportunity, simPenalty, simMatchGoals, simPenaltyShootout
 } from '@/lib/career';
 import { sanitizeChampionsBracket, extractChampionsRepescados, syncChampionsRepescadosToUEL } from '@/lib/championsSanitizer';
@@ -35,7 +35,8 @@ import { SeasonCalendarModal } from '@/components/SeasonCalendarModal';
 import { 
   SEASON_CALENDAR_42_WEEKS, getSemanaCalendario, getTotalCalendarWeeks,
   isChampionsWeek, isEuropaLeagueWeek, getNextChampionsWeek, getNextEuropaLeagueWeek,
-  getWeekForLeagueMatchday
+  getWeekForLeagueMatchday, getExpectedCupMatchdayForWeek, getLeagueMatchdayForWeek,
+  isChampionsMatchWeek, isEuropaLeagueMatchWeek
 } from '@/lib/seasonCalendar';
 import championsStadiumBg from './assets/images/champions_league_stadium_1786921289637.jpg';
 import worldCupStadiumDayBg from './assets/images/world_cup_stadium_day_1786921535635.jpg';
@@ -2407,11 +2408,11 @@ const HubView = ({
         </div>
 
         {/* BOTÓN PRINCIPAL DE ACCIÓN: SIMULAR SEMANA SITUADO ARRIBA PARA POSICIÓN VERTICAL FIJA Y ESTABLE */}
-        {currentWeek <= 42 && !(allLeaguesFinished && championsFinished) ? (
+        {currentWeek <= 42 && !((allLeaguesFinished && championsFinished) || (currentWeek >= 42 && allLeaguesFinished)) ? (
           <div className='space-y-2 pt-0.5'>
             <button
               onClick={onSimulateWeek || onSimulateAll}
-              className='w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-md'
+              className='w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-md cursor-pointer'
             >
               <Dices size={17} className='text-slate-950 stroke-[2.5]' />
               <span>
@@ -2423,7 +2424,7 @@ const HubView = ({
             {onSimulateUntilNextMatch && (
               <button
                 onClick={onSimulateUntilNextMatch}
-                className='w-full py-2.5 px-3 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white rounded-xl text-[9.5px] font-bold uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 border border-white/10'
+                className='w-full py-2.5 px-3 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 hover:text-white rounded-xl text-[9.5px] font-bold uppercase tracking-wider active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
               >
                 <FastForward size={13} className='text-amber-400' />
                 <span>Simular hasta mi próximo partido</span>
@@ -2433,7 +2434,7 @@ const HubView = ({
         ) : (
           <button
             onClick={onNewSeason}
-            className='w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-md'
+            className='w-full py-3.5 px-4 bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 rounded-2xl text-[11px] font-black uppercase italic tracking-wider active:scale-[0.98] transition-colors flex items-center justify-center gap-2 border border-amber-300/60 shadow-xl cursor-pointer'
           >
             <RotateCcw size={16} className='text-slate-950 stroke-[2.5]' />
             <span>Iniciar Temporada {seasonState?.season ? seasonState.season + 1 : 2}</span>
@@ -4792,15 +4793,24 @@ function DiceFootballApp() {
 
   const currentMatchKey = useMemo(() => {
     const cl = comps['C1'];
-    const currentSeason = seasonState.season || career.clSeason || 1;
-    if (seasonState.phase === 'champions' || (cl?.teams?.length && cl.phase && cl.phase !== 'Terminado')) {
+    const uel = comps['C3'];
+    const currentSeason = seasonState.season || career.clSeason || career.uelSeason || 1;
+    const currentWk = seasonState.currentWeek || 1;
+    const isClWk = isChampionsWeek(currentWk);
+    const isUelWk = isEuropaLeagueWeek(currentWk);
+
+    if ((isClWk || seasonState.phase === 'champions') && cl?.teams?.length && cl.phase && cl.phase !== 'Terminado') {
       return getChampionsMatchKey(currentSeason, cl.phase || 'groups', cl.matchday || 0);
     }
+    if ((isUelWk || seasonState.phase === 'europa') && uel?.teams?.length && uel.phase && uel.phase !== 'Terminado') {
+      return getEuropaLeagueMatchKey(currentSeason, uel.phase || 'Dieciseisavos', uel.matchday || 0);
+    }
     return `league-${currentSeason}-${career.div || 1}-${careerMd}`;
-  }, [seasonState.phase, seasonState.season, comps, career.div, career.clSeason, careerMd]);
+  }, [seasonState.phase, seasonState.season, seasonState.currentWeek, comps, career.div, career.clSeason, career.uelSeason, careerMd]);
 
   const applyDrillResult = (result) => {
     if (!careerTeam) return;
+    const currentWk = seasonState.currentWeek || 1;
 
     const drillFeedback = {
       simulated: false,
@@ -4824,6 +4834,8 @@ function DiceFootballApp() {
           trainedMatchday: careerMd,
           trainedMatchKey: currentMatchKey,
           trainedClMatchKey: currentMatchKey,
+          trainedUelMatchKey: currentMatchKey,
+          trainedWeek: currentWk,
           activeInjury: null,
           medicalImmunityWeeks: 3,
           immunityActivatedMatchday: careerMd,
@@ -4847,6 +4859,8 @@ function DiceFootballApp() {
           trainedMatchday: careerMd,
           trainedMatchKey: currentMatchKey,
           trainedClMatchKey: currentMatchKey,
+          trainedUelMatchKey: currentMatchKey,
+          trainedWeek: currentWk,
           activeInjury: {
             attr,
             label: attrLabel,
@@ -4872,6 +4886,8 @@ function DiceFootballApp() {
         trainedMatchday: careerMd,
         trainedMatchKey: currentMatchKey,
         trainedClMatchKey: currentMatchKey,
+        trainedUelMatchKey: currentMatchKey,
+        trainedWeek: currentWk,
         lastTrainingResult: drillFeedback
       }));
       return;
@@ -4883,6 +4899,8 @@ function DiceFootballApp() {
       trainedMatchday: careerMd,
       trainedMatchKey: currentMatchKey,
       trainedClMatchKey: currentMatchKey,
+      trainedUelMatchKey: currentMatchKey,
+      trainedWeek: currentWk,
       lastTrainingResult: drillFeedback
     }));
   };
@@ -4923,7 +4941,15 @@ function DiceFootballApp() {
   };
 
   // Resuelve la jornada con un marcador dado (jugado con dados o simulado)
-  const applyCareerMatchday = (scoreH, scoreA, trainingFeedback = null, extraTrainingPe = 0, nextImmunityWeeks = null, injuryOccurredThisMatchday = false) => {
+  const applyCareerMatchday = (
+    scoreH: number,
+    scoreA: number,
+    trainingFeedback: any = null,
+    extraTrainingPe: number = 0,
+    nextImmunityWeeks: number | null = null,
+    injuryOccurredThisMatchday: boolean = false,
+    advanceSeasonWeek: boolean = true
+  ) => {
     if (!careerFixture || !careerTeam) return;
     const compId = career.compId;
     const myGf = careerIsHome ? scoreH : scoreA;
@@ -5000,11 +5026,14 @@ function DiceFootballApp() {
     syncLeaguesToGlobal(LEAGUE_IDS.filter(id => id !== compId));
     syncLeaguesToGlobal([compId]);
 
-    // Simular copas europeas de esta semana si correspondían
+    // Simular copas europeas de esta semana si correspondían (únicamente si el usuario no participa activamente en ellas o ya jugó)
     const currentWk = seasonState.currentWeek || 1;
     const weekData = getSemanaCalendario(currentWk);
     const hasChampions = weekData?.fixtures?.some(f => f.competicion === 'CHAMPIONS' && f.esPartido);
     const hasEuropa = weekData?.fixtures?.some(f => f.competicion === 'EUROPA_LEAGUE' && f.esPartido);
+
+    const isCareerAliveInC1 = Boolean(careerClInfo?.alive && !careerClInfo?.champion && !comps['C1']?.showWinner && comps['C1']?.phase !== 'Terminado');
+    const isCareerAliveInC3 = Boolean(careerUelInfo?.alive && !careerUelInfo?.champion && !comps['C3']?.showWinner && comps['C3']?.phase !== 'Terminado');
 
     if (hasChampions || hasEuropa) {
       setComps(prev => {
@@ -5012,7 +5041,8 @@ function DiceFootballApp() {
         let c1 = next['C1'];
         if (c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado') {
           const expClMd = getExpectedCupMatchdayForWeek('C1', currentWk);
-          if (hasChampions && (expClMd === null || (c1.matchday || 0) < expClMd)) {
+          // Si el usuario compite en la Champions y no ha jugado aún esta fecha, NO auto-simular la Champions
+          if (hasChampions && (!isCareerAliveInC1) && (expClMd === null || (c1.matchday || 0) < expClMd)) {
             c1 = simulateSingleCupStage(c1, 'C1');
             next['C1'] = c1;
           }
@@ -5026,7 +5056,8 @@ function DiceFootballApp() {
         }
         if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
           const expUelMd = getExpectedCupMatchdayForWeek('C3', currentWk);
-          if (hasEuropa && (expUelMd === null || (c3.matchday || 0) < expUelMd)) {
+          // Si el usuario compite en la Europa League y no ha jugado aún esta fecha, NO auto-simular la UEL
+          if (hasEuropa && (!isCareerAliveInC3) && (expUelMd === null || (c3.matchday || 0) < expUelMd)) {
             c3 = simulateSingleCupStage(c3, 'C3');
             next['C3'] = c3;
           }
@@ -5035,10 +5066,16 @@ function DiceFootballApp() {
       });
     }
 
-    setSeasonState(s => ({
-      ...s,
-      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
-    }));
+    const userPendingClThisWeek = hasChampions && isCareerAliveInC1 && ((comps['C1']?.matchday || 0) < (getExpectedCupMatchdayForWeek('C1', currentWk) ?? 99));
+    const userPendingUelThisWeek = hasEuropa && isCareerAliveInC3 && ((comps['C3']?.matchday || 0) < (getExpectedCupMatchdayForWeek('C3', currentWk) ?? 99));
+
+    // Solo avanzar la semana si no hay un compromiso europeo pendiente para el mánager en esta misma semana
+    if (advanceSeasonWeek && !userPendingClThisWeek && !userPendingUelThisWeek) {
+      setSeasonState(s => ({
+        ...s,
+        currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
+      }));
+    }
 
     const ownStrength = cleanBase.att + cleanBase.opp + cleanBase.def;
     const rivalStrength = (careerRival?.att || 0) + (careerRival?.opp || 0) + (careerRival?.def || 0);
@@ -5268,7 +5305,8 @@ function DiceFootballApp() {
     trainingFeedback: any,
     extraPeGained: number,
     nextImmunityWeeks: number | null,
-    injuryOccurredInSim: boolean
+    injuryOccurredInSim: boolean,
+    advanceSeasonWeek: boolean = true
   ) => {
     if (!careerFixture || !careerTeam || !careerRival) return;
     const baseTeamStats = {
@@ -5288,7 +5326,7 @@ function DiceFootballApp() {
     const away = careerIsHome ? careerRival : mine;
     const { sh, sa } = simMatchGoals(home.opp, home.att, away.def, away.opp, away.att, home.def);
 
-    applyCareerMatchday(sh, sa, trainingFeedback, extraPeGained, nextImmunityWeeks, injuryOccurredInSim);
+    applyCareerMatchday(sh, sa, trainingFeedback, extraPeGained, nextImmunityWeeks, injuryOccurredInSim, advanceSeasonWeek);
   };
 
   // Manejador de la decisión del usuario en el Modal de Alerta Médica de Simulación
@@ -5342,7 +5380,7 @@ function DiceFootballApp() {
   };
 
   // Simula tu propio partido con la táctica elegida y resuelve la jornada
-  const simulateCareerMatchday = () => {
+  const simulateCareerMatchday = (advanceSeasonWeek: boolean = true) => {
     if (!careerFixture || !careerTeam || !careerRival) return;
 
     let trainingFeedback = null;
@@ -5449,7 +5487,7 @@ function DiceFootballApp() {
       }
     }
 
-    executeCareerSimulatedMatch(injuryAttr, trainingFeedback, extraPeGained, newImmunityWeeks, injuryOccurredInSim);
+    executeCareerSimulatedMatch(injuryAttr, trainingFeedback, extraPeGained, newImmunityWeeks, injuryOccurredInSim, advanceSeasonWeek);
   };
 
   const simulateLeagueToGlobal = (compId: string) => {
@@ -5484,6 +5522,37 @@ function DiceFootballApp() {
     const currentWk = seasonState.currentWeek || 1;
     const weekData = getSemanaCalendario(currentWk);
 
+    const isCareerAliveInC1 = Boolean(careerClInfo?.alive && !careerClInfo?.champion && !comps['C1']?.showWinner && comps['C1']?.phase !== 'Terminado');
+    const isCareerAliveInC3 = Boolean(careerUelInfo?.alive && !careerUelInfo?.champion && !comps['C3']?.showWinner && comps['C3']?.phase !== 'Terminado');
+
+    const hasChampions = weekData?.fixtures?.some(f => f.competicion === 'CHAMPIONS' && f.esPartido);
+    const hasEuropa = weekData?.fixtures?.some(f => f.competicion === 'EUROPA_LEAGUE' && f.esPartido);
+    const hasLeague = weekData?.fixtures?.some(f => f.competicion === 'LIGA' && f.esPartido);
+
+    const expClMd = getExpectedCupMatchdayForWeek('C1', currentWk);
+    const expUelMd = getExpectedCupMatchdayForWeek('C3', currentWk);
+    const expLeagueMd = getLeagueMatchdayForWeek(currentWk);
+
+    const userPendingCl = hasChampions && isCareerAliveInC1 && ((comps['C1']?.matchday || 0) < (expClMd ?? 99));
+    const userPendingUel = hasEuropa && isCareerAliveInC3 && ((comps['C3']?.matchday || 0) < (expUelMd ?? 99));
+    const careerMd = (career.div === 2 ? comps[career.compId]?.matchday2 : comps[career.compId]?.matchday) || 0;
+    const userPendingLeague = (hasLeague || !weekData) && career?.active && careerTeam && careerFixture && !careerDivisionFinished && (careerMd < (expLeagueMd ?? (careerMd + 1)));
+
+    // Si el mánager tiene un partido europeo pendiente en esta semana, simular ese partido europeo primero
+    if (userPendingCl) {
+      simulateCareerChampionsMatch();
+      return;
+    }
+    if (userPendingUel) {
+      simulateCareerUelMatch();
+      return;
+    }
+    // Si el mánager tiene un partido de liga pendiente en esta semana, simular el partido de liga
+    if (userPendingLeague) {
+      simulateCareerMatchday(false);
+      return;
+    }
+
     if (weekData) {
       const fixtures = weekData.fixtures || [];
       const milestoneFixtures = fixtures.filter(f => !f.esPartido);
@@ -5497,20 +5566,12 @@ function DiceFootballApp() {
       }
     }
 
-    // 1. Simular jornada de Liga si la semana la incluye
-    const hasLeague = weekData?.fixtures?.some(f => f.competicion === 'LIGA' && f.esPartido);
+    // 1. Simular jornada de Liga para el resto del mundo
     if (hasLeague || !weekData) {
-      if (career?.active && careerTeam && careerFixture && !careerDivisionFinished) {
-        simulateCareerMatchday();
-      } else {
-        syncLeaguesToGlobal(LEAGUE_IDS);
-      }
+      syncLeaguesToGlobal(LEAGUE_IDS);
     }
 
     // 2. Simular Competiciones Europeas (Champions League y Europa League sincronizadas)
-    const hasChampions = weekData?.fixtures?.some(f => f.competicion === 'CHAMPIONS' && f.esPartido);
-    const hasEuropa = weekData?.fixtures?.some(f => f.competicion === 'EUROPA_LEAGUE' && f.esPartido);
-
     if (hasChampions || hasEuropa) {
       setComps(prev => {
         let next = { ...prev };
@@ -5523,7 +5584,6 @@ function DiceFootballApp() {
             c1 = { ...next['C1'], ...autoData, id: 'C1', name: 'Champions League', type: 'cup' };
           }
         }
-        const expClMd = getExpectedCupMatchdayForWeek('C1', currentWk);
         const canSimulateCl = hasChampions && c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado' && (expClMd === null || (c1.matchday || 0) < expClMd);
         if (canSimulateCl) {
           c1 = simulateSingleCupStage(c1, 'C1');
@@ -5547,7 +5607,6 @@ function DiceFootballApp() {
           }
         }
 
-        const expUelMd = getExpectedCupMatchdayForWeek('C3', currentWk);
         const canSimulateUel = hasEuropa && c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado' && (expUelMd === null || (c3.matchday || 0) < expUelMd);
         if (canSimulateUel) {
           c3 = simulateSingleCupStage(c3, 'C3');
@@ -5558,10 +5617,60 @@ function DiceFootballApp() {
       });
     }
 
-    // 3. Incrementar la semana de la temporada (al pasar de 42 la temporada queda completada)
+    // 3. Si alcanzamos o superamos la semana 42 (Cierre de Temporada), resolver cualquier liga o copa que quede pendiente al 100%
+    if (currentWk >= 42) {
+      setComps(prev => {
+        let next = { ...prev };
+        LEAGUE_IDS.forEach(id => {
+          let c = next[id];
+          if (!c) return;
+          if (!leagueSeasonOver(c)) {
+            const runDivToFinish = (teamsKey: string, mdKey: string, histKey: string, winKey: string, isDiv2?: boolean) => {
+              let guard = 0;
+              const total = divTotalRounds(c[teamsKey]);
+              while ((c[mdKey] || 0) < total && guard++ < 80) {
+                const res = simulateDivisionMatchday(c[teamsKey], c[mdKey] || 0, c[histKey] || [], id, isDiv2);
+                if (!res) break;
+                c = {
+                  ...c,
+                  [teamsKey]: res.updatedTeams,
+                  [mdKey]: res.nextMatchday,
+                  [histKey]: res.newHistory,
+                  [winKey]: res.isFinished ? true : c[winKey]
+                };
+              }
+            };
+            runDivToFinish('teams', 'matchday', 'history', 'showWinner', false);
+            runDivToFinish('teams2', 'matchday2', 'history2', 'showWinner2', true);
+            next[id] = c;
+          }
+        });
+
+        // Asegurar conclusión de Champions si no ha finalizado
+        let c1 = next['C1'];
+        if (c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado') {
+          next['C1'] = simulateEntireCupToFinish(c1);
+        }
+        // Asegurar conclusión de Europa League si no ha finalizado
+        let c3 = next['C3'];
+        if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
+          next['C3'] = simulateEntireCupToFinish(c3);
+        }
+        return next;
+      });
+
+      setSeasonState(s => ({
+        ...s,
+        currentWeek: 43,
+        phase: 'completed'
+      }));
+      return;
+    }
+
+    // 4. Incrementar la semana de la temporada (al pasar de 42 la temporada queda completada)
     setSeasonState(s => ({
       ...s,
-      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
+      currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
     }));
   };
 
@@ -5621,9 +5730,15 @@ function DiceFootballApp() {
   const clComp = comps['C1'];
   const careerClTeam = useMemo(() => {
     if (!careerTeam || !clComp?.teams?.length) return null;
+    const isQual = Boolean(
+      career.clQualified ||
+      (clComp.careerTeamId && clComp.careerTeamId === career.teamId) ||
+      (clComp.careerTeamName && careerTeam.name && clComp.careerTeamName === careerTeam.name)
+    );
+    if (!isQual) return null;
     return clComp.teams.find(t => t.id === clComp.careerTeamId) ||
       clComp.teams.find(t => t.name === (clComp.careerTeamName || careerTeam.name)) || null;
-  }, [clComp, careerTeam]);
+  }, [clComp, careerTeam, career.clQualified, career.teamId]);
 
   const careerClWinnerId = useMemo(() => {
     const final = clComp?.bracket?.Final?.[0] || clComp?.bracket?.Final;
@@ -5671,6 +5786,74 @@ function DiceFootballApp() {
       isGlobalPhase: seasonState.phase === 'champions'
     };
   }, [clComp, careerClTeam, careerClAlive, careerClWinnerId, seasonState.phase, seasonState.season]);
+
+  const uelComp = comps['C3'];
+  const careerUelTeam = useMemo(() => {
+    if (!uelComp?.teams?.length || !careerTeam) return null;
+    const isQual = Boolean(
+      career.uelQualified ||
+      (uelComp.careerTeamId && uelComp.careerTeamId === career.teamId) ||
+      (uelComp.careerTeamName && careerTeam.name && uelComp.careerTeamName === careerTeam.name)
+    );
+    if (!isQual) return null;
+    return uelComp.teams.find((t: any) => t.id === uelComp.careerTeamId) ||
+      uelComp.teams.find((t: any) => t.name === (uelComp.careerTeamName || careerTeam.name)) ||
+      uelComp.teams.find((t: any) => t.id === uelComp.userTeamId) || null;
+  }, [uelComp, careerTeam, career.uelQualified, career.teamId]);
+
+  const careerUelWinnerId = useMemo(() => {
+    if (!uelComp) return null;
+    const final = uelComp.bracket?.Final?.[0] || uelComp.bracket?.Final;
+    if (!final || final.sh === null || final.sh === undefined) return null;
+    if (final.sh > final.sa) return final.hId;
+    if (final.sa > final.sh) return final.aId;
+    return ((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId;
+  }, [uelComp]);
+
+  const careerUelAlive = useMemo(() => {
+    if (!careerUelTeam || !uelComp) return false;
+    if (uelComp.phase === 'Terminado' || uelComp.showWinner) return careerUelWinnerId === careerUelTeam.id;
+    const phase = uelComp.phase || 'Dieciseisavos';
+    const matches = Array.isArray(uelComp.bracket?.[phase])
+      ? uelComp.bracket[phase]
+      : [uelComp.bracket?.[phase]].filter(Boolean);
+    return matches.some((m: any) => m && (m.hId === careerUelTeam.id || m.aId === careerUelTeam.id));
+  }, [uelComp, careerUelTeam, careerUelWinnerId]);
+
+  const careerUelInfo = useMemo(() => {
+    if (!careerUelTeam) {
+      return {
+        season: seasonState.season || 1,
+        alive: false,
+        notQualified: true,
+        phase: uelComp?.phase || 'Dieciseisavos',
+        champion: false,
+        eliminated: false,
+        rivalName: null
+      };
+    }
+    const champion = careerUelWinnerId === careerUelTeam.id;
+    const phase = uelComp?.phase || 'Dieciseisavos';
+    const rival = (() => {
+      if (!uelComp || phase === 'Terminado') return null;
+      const matches = Array.isArray(uelComp.bracket?.[phase])
+        ? uelComp.bracket[phase]
+        : [uelComp.bracket?.[phase]].filter(Boolean);
+      const m = matches.find((x: any) => x && (x.hId === careerUelTeam.id || x.aId === careerUelTeam.id));
+      if (!m) return null;
+      const rivalId = m.hId === careerUelTeam.id ? m.aId : m.hId;
+      return uelComp.teams.find((t: any) => t.id === rivalId) || null;
+    })();
+    return {
+      season: seasonState.season || 1,
+      phase,
+      alive: careerUelAlive,
+      champion,
+      eliminated: !careerUelAlive && !champion,
+      rivalName: rival?.name || null,
+      notQualified: false
+    };
+  }, [uelComp, careerUelTeam, careerUelAlive, careerUelWinnerId, seasonState.season]);
 
   // Inicializa o sortea la Champions League sin alterar ni terminar las ligas en juego
   const initOrDrawChampions = (forceDraw = false) => {
@@ -5883,7 +6066,9 @@ function DiceFootballApp() {
     if (!clComp?.teams?.length || !careerTeam) return;
 
     const careerClTeam = clComp.teams.find(t => t.id === clComp.careerTeamId) ||
-      clComp.teams.find(t => t.name === (clComp.careerTeamName || careerTeam.name));
+      clComp.teams.find(t => t.name === (clComp.careerTeamName || careerTeam.name)) ||
+      clComp.teams.find(t => t.id === clComp.userTeamId) ||
+      clComp.teams.find(t => t.id === career.teamId);
     if (!careerClTeam) return;
 
     const phase = clComp.phase || 'groups';
@@ -6123,6 +6308,21 @@ function DiceFootballApp() {
       };
     });
 
+    const currentWk = seasonState.currentWeek || 1;
+    const weekData = getSemanaCalendario(currentWk);
+    const expLeagueMd = getLeagueMatchdayForWeek(currentWk);
+    const hasLeagueThisWeek = weekData?.fixtures?.some(f => f.competicion === 'LIGA' && f.esPartido);
+    const careerMd = (career.div === 2 ? comps[career.compId]?.matchday2 : comps[career.compId]?.matchday) || 0;
+    const userPendingLeagueThisWeek = hasLeagueThisWeek && !careerDivisionFinished && (careerMd < (expLeagueMd ?? (careerMd + 1)));
+
+    // Si ya no queda partido de liga pendiente para esta semana, avanzar la semana del calendario
+    if (!userPendingLeagueThisWeek) {
+      setSeasonState(s => ({
+        ...s,
+        currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
+      }));
+    }
+
     setMatchState(null);
     setView('career');
   };
@@ -6357,7 +6557,8 @@ function DiceFootballApp() {
 
     const careerUelTeam = uelComp.teams.find(t => t.id === uelComp.careerTeamId) ||
       uelComp.teams.find(t => t.name === (uelComp.careerTeamName || careerTeam.name)) ||
-      uelComp.teams.find(t => t.id === uelComp.userTeamId);
+      uelComp.teams.find(t => t.id === uelComp.userTeamId) ||
+      uelComp.teams.find(t => t.id === career.teamId);
     if (!careerUelTeam) return;
 
     const phase = uelComp.phase || 'Dieciseisavos';
@@ -6551,10 +6752,20 @@ function DiceFootballApp() {
       };
     });
 
-    setSeasonState(s => ({
-      ...s,
-      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
-    }));
+    const currentWk = seasonState.currentWeek || 1;
+    const weekData = getSemanaCalendario(currentWk);
+    const expLeagueMd = getLeagueMatchdayForWeek(currentWk);
+    const hasLeagueThisWeek = weekData?.fixtures?.some(f => f.competicion === 'LIGA' && f.esPartido);
+    const careerMd = (career.div === 2 ? comps[career.compId]?.matchday2 : comps[career.compId]?.matchday) || 0;
+    const userPendingLeagueThisWeek = hasLeagueThisWeek && !careerDivisionFinished && (careerMd < (expLeagueMd ?? (careerMd + 1)));
+
+    // Si ya no queda partido de liga pendiente para esta semana, avanzar la semana del calendario
+    if (!userPendingLeagueThisWeek) {
+      setSeasonState(s => ({
+        ...s,
+        currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
+      }));
+    }
 
     setMatchState(null);
     if (view === 'careerMatch') {
@@ -7112,12 +7323,11 @@ function DiceFootballApp() {
   const openCareerReview = () => {
     if (careerReview) return;
     const season = seasonState.season || 1;
-    // Una vez firmado (renovación o club nuevo) no se vuelve a abrir el balance
-    if (career.signedForSeason === season) return;
-    const alreadyProcessed = career.lastProcessedSeason === season;
+    const alreadySigned = career.signedForSeason === season;
+    const alreadyProcessed = career.lastProcessedSeason === season || alreadySigned;
     const review = buildCareerReview();
     if (!review) return;
-    setCareerReview(review);
+    setCareerReview(alreadySigned ? { ...review, contractEnd: false, offers: [] } : review);
     if (!alreadyProcessed) {
       if (review.fired && (career.originalTeamStats || careerTeam)) {
         setComps(prev => restoreClubOriginalStatsInComps(prev, career.originalTeamStats, careerTeam?.name));
@@ -7414,7 +7624,7 @@ function DiceFootballApp() {
     });
     setSeasonState(s => ({
       ...s,
-      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
+      currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
     }));
   };
 
@@ -7765,7 +7975,7 @@ function DiceFootballApp() {
     // Avanzar la semana del calendario de la temporada
     setSeasonState(s => ({
       ...s,
-      currentWeek: Math.min(42, (s.currentWeek || 1) + 1)
+      currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
     }));
   };
 
@@ -10120,6 +10330,7 @@ function DiceFootballApp() {
                 onNewSeason={() => { startNewGlobalSeason(); setView('career'); }}
                 clInfo={careerClInfo}
                 clComp={comps['C1']}
+                uelInfo={careerUelInfo}
                 uelComp={comps['C3']}
                 onOpenUel={() => { setActiveCompId('C3'); setCompView('main'); setView('competition'); }}
                 onPlayUelMatch={startCareerUelMatch}
@@ -10139,7 +10350,7 @@ function DiceFootballApp() {
                   });
                   setSeasonState(s => ({
                     ...s,
-                    currentWeek: Math.min(42, Math.max(39, (s.currentWeek || 1) + 1))
+                    currentWeek: Math.min(43, Math.max(39, (s.currentWeek || 1) + 1))
                   }));
                 }}
                 onPlayChampionsMatch={startCareerChampionsMatch}
