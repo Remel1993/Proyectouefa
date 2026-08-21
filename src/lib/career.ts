@@ -36,8 +36,8 @@ export const TIERS = {
   4: { name: 'Gigante de Primera', caps: { att: 5, opp: 5, def: 4 }, philosophy: 'Gestionar resultados; exigencia máxima' }
 };
 
-// Costos de evolución con PE: costo del salto hacia el nivel destino
-export const PE_COST = { 2: 15, 3: 35, 4: 70, 5: 70 };
+// Costos de evolución con PE: costo del salto hacia el nivel destino (1->2: 15, 2->3: 35, 3->4: 70, 4->5: 120)
+export const PE_COST = { 2: 15, 3: 35, 4: 70, 5: 120 };
 
 export const peCostFor = (currentValue) => PE_COST[currentValue + 1] ?? 999;
 
@@ -528,8 +528,8 @@ export const seasonObjectives = ({
     }
   ];
 
-  // 5) Objetivo Continental (UEFA Champions League)
-  if (clQualified) {
+  // 5) Objetivo Continental (UEFA Champions League o reclasificación a UEFA Europa League)
+  if (clQualified && !droppedToUel) {
     const clTarget = getChampionsObjectiveTarget(tier);
     const targetRank = CL_PHASE_ORDER.indexOf(clTarget.targetPhase);
     const currentRank = CL_PHASE_ORDER.indexOf(clPhase || 'groups');
@@ -590,6 +590,67 @@ export const seasonObjectives = ({
       statusLabel: clStatusLabel,
       rewardPe: clTarget.pe,
       rewardRep: clTarget.rep
+    });
+  } else if (droppedToUel || (uelQualified && !clQualified)) {
+    const uelTarget = getEuropaLeagueObjectiveTarget(tier, droppedToUel);
+    const targetRank = UEL_PHASE_ORDER.indexOf(uelTarget.targetPhase);
+    const currentRank = UEL_PHASE_ORDER.indexOf(uelPhase || 'Dieciseisavos');
+
+    let uelDone = false;
+    let uelProgress = 25;
+    let uelStatus: 'completed' | 'on_track' | 'at_risk' | 'failed' = 'on_track';
+    let uelStatusLabel = 'En Carrera (UEL)';
+
+    if (uelChampion) {
+      uelDone = true;
+      uelProgress = 100;
+      uelStatus = 'completed';
+      uelStatusLabel = '🏆 ¡Campeón de Europa League!';
+    } else if (uelEliminated) {
+      if (currentRank >= targetRank) {
+        uelDone = true;
+        uelProgress = 100;
+        uelStatus = 'completed';
+        uelStatusLabel = 'Objetivo Cumplido';
+      } else {
+        uelDone = false;
+        uelProgress = Math.max(15, Math.round((currentRank / (targetRank || 1)) * 80));
+        uelStatus = 'failed';
+        uelStatusLabel = '❌ Eliminado en UEL';
+      }
+    } else {
+      if (currentRank >= targetRank) {
+        uelDone = true;
+        uelProgress = 100;
+        uelStatus = 'completed';
+        uelStatusLabel = 'Objetivo Alcanzado';
+      } else {
+        uelDone = false;
+        uelProgress = Math.max(25, Math.min(90, Math.round(((currentRank + 1) / (targetRank + 1)) * 90)));
+        uelStatus = 'on_track';
+        uelStatusLabel = `En ${uelPhaseLabel(uelPhase)}`;
+      }
+    }
+
+    items.push({
+      key: droppedToUel ? 'europaLeagueRepescado' : 'europaLeague',
+      category: 'Continental',
+      priority: tier >= 4 ? 'Muy Alta' : 'Alta',
+      extra: false,
+      label: uelTarget.label,
+      detail: uelChampion
+        ? '🏆 ¡Hito continental: Campeón de la UEFA Europa League!'
+        : uelEliminated
+          ? `Eliminado en ${uelPhaseLabel(uelPhase)} (Exigencia: ${uelTarget.targetValue})`
+          : `${uelTarget.detail} · Fase actual: ${uelPhaseLabel(uelPhase)}`,
+      done: uelDone,
+      progress: uelProgress,
+      currentValue: uelChampion ? 'Campeón UEL' : uelEliminated ? `Eliminado (${uelPhaseLabel(uelPhase)})` : uelPhaseLabel(uelPhase),
+      targetValue: uelTarget.targetValue,
+      status: uelStatus,
+      statusLabel: uelStatusLabel,
+      rewardPe: uelTarget.pe,
+      rewardRep: uelTarget.rep
     });
   } else if (div === 1 && tier >= 3) {
     const spots = getClSpots(compId || career?.compId);
@@ -749,6 +810,74 @@ export const clProgressRep = ({ champion = false, phaseReached = null, played = 
   if (idx === 2) return 2.5; // Cuartos
   if (idx === 1) return 1.5; // Octavos
   return 0.5; // sólo grupos
+};
+
+/* ============================== EUROPA LEAGUE ==============================
+ * Funciones de apoyo para la UEFA Europa League (competición 'C3').
+ */
+export const UEL_PHASE_ORDER = ['Dieciseisavos', 'Octavos', 'Cuartos', 'Semis', 'Final', 'Terminado'];
+
+export const uelPhaseLabel = (phase?: string | null) => ({
+  Dieciseisavos: 'Dieciseisavos de final',
+  Octavos: 'Octavos de final',
+  Cuartos: 'Cuartos de final',
+  Semis: 'Semifinales',
+  Final: 'Gran Final',
+  Terminado: 'Torneo terminado'
+}[phase || ''] || phase || 'Dieciseisavos');
+
+/** Determina el objetivo de Europa League según el Tier y si proviene de Champions */
+export const getEuropaLeagueObjectiveTarget = (tier: number = 1, droppedFromCl: boolean = false) => {
+  if (tier >= 4) {
+    return {
+      targetPhase: 'Final',
+      label: droppedFromCl ? 'Conquistar la UEFA Europa League (Reclasificado)' : 'Conquistar la UEFA Europa League',
+      detail: 'La junta directiva exige proclamarse Campeón de la UEFA Europa League',
+      targetValue: '🏆 Campeón UEL',
+      pe: 8,
+      rep: 6.0
+    };
+  }
+  if (tier === 3) {
+    return {
+      targetPhase: 'Semis',
+      label: droppedFromCl ? 'Alcanzar Semifinales de Europa League' : 'Alcanzar Semifinales de UEL',
+      detail: 'Exigencia continental: pelear por el trofeo y alcanzar como mínimo las Semifinales',
+      targetValue: 'Semifinales',
+      pe: 6,
+      rep: 4.5
+    };
+  }
+  if (tier === 2) {
+    return {
+      targetPhase: 'Cuartos',
+      label: 'Alcanzar Cuartos de Final de Europa League',
+      detail: 'Objetivo continental: avanzar con solidez a los Cuartos de Final',
+      targetValue: 'Cuartos de Final',
+      pe: 5,
+      rep: 3.5
+    };
+  }
+  return {
+    targetPhase: 'Octavos',
+    label: 'Superar Dieciseisavos de Europa League',
+    detail: 'Hazaña europea: avanzar a Octavos de Final de la Europa League',
+    targetValue: 'Octavos de Final',
+    pe: 4,
+    rep: 2.5
+  };
+};
+
+/** Reputación por el recorrido europeo en la UEFA Europa League. */
+export const uelProgressRep = ({ champion = false, phaseReached = null, played = false }: { champion?: boolean; phaseReached?: string | null; played?: boolean } = {}) => {
+  if (champion) return 6;
+  if (!played) return 0;
+  const idx = UEL_PHASE_ORDER.indexOf(phaseReached || 'Dieciseisavos');
+  if (idx >= 4) return 4; // llegó a la Final
+  if (idx === 3) return 3; // Semifinales
+  if (idx === 2) return 2; // Cuartos
+  if (idx === 1) return 1; // Octavos
+  return 0.5; // sólo Dieciseisavos
 };
 
 /* ======================== MERCADO DE ENTRENADORES ==========================
@@ -1638,6 +1767,7 @@ export const DEFAULT_CAREER = {
   trophies: {
     leagues: 0,
     champions: 0,
+    uel: 0,
     promotions: 0
   },
   lastSimulationFeedback: null,

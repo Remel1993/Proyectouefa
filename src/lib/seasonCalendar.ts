@@ -1024,10 +1024,12 @@ export const getLeagueMatchdayForWeek = (weekIndex: number): number | null => {
 };
 
 export const getWeekForLeagueMatchday = (matchday: number): number => {
+  if (matchday <= 0) return 1;
+  if (matchday > 38) return 42;
   const week = SEASON_CALENDAR_42_WEEKS.find(w => 
     w.fixtures.some(f => f.competicion === "LIGA" && f.esPartido && f.leagueMatchday === matchday)
   );
-  return week ? week.weekIndex : matchday;
+  return week ? week.weekIndex : Math.min(42, Math.max(1, matchday));
 };
 
 // Semanas oficiales con fechas de UEFA Champions League (Sorteos y Rondas)

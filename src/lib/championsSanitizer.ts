@@ -3,6 +3,7 @@
  */
 
 import { simMatchGoals } from './career';
+import { PRESETS, PRESETS_2 } from './presets';
 
 export interface ChampionsBracketMatch {
   id: string;
@@ -144,6 +145,7 @@ export const extractChampionsRepescados = (c1Comp: any): any[] => {
       const groupLetter = g.name || `Grupo ${String.fromCharCode(65 + gi)}`;
       repescados.push({
         ...third,
+        originalId: third.id,
         id: 17 + gi,
         isRepesca: true,
         clOrigin: `Champions League (3.º ${groupLetter})`
@@ -163,6 +165,11 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   
   // Si la Europa League ya disputó Dieciseisavos y ya avanzó a Octavos, Cuartos, Semis o Final, no alterar la llave
   if (uelComp.phase && uelComp.phase !== 'Dieciseisavos' && (uelComp.matchday || 0) >= 2) {
+    return uelComp;
+  }
+
+  // Si Champions aún está en grupos y no ha completado las 6 jornadas, no sincronizar prematuramente
+  if (c1Comp?.phase === 'groups' && (c1Comp?.matchday || 0) < 6) {
     return uelComp;
   }
 
@@ -200,7 +207,7 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
-      hId: dieciseisavosWinners[i] ?? null,
+      hId: dieciseisavosWinners[i] ?? m.hId ?? null,
       aId: 17 + i
     }));
   } else {
@@ -223,8 +230,8 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   let careerTeamName = uelComp.careerTeamName;
 
   const userRepescado = realRepescados.find((r: any) => 
-    (c1Comp.careerTeamId && r.id === c1Comp.careerTeamId) ||
-    (c1Comp.userTeamId && r.id === c1Comp.userTeamId) ||
+    (c1Comp.careerTeamId && (r.originalId === c1Comp.careerTeamId || r.id === c1Comp.careerTeamId)) ||
+    (c1Comp.userTeamId && (r.originalId === c1Comp.userTeamId || r.id === c1Comp.userTeamId)) ||
     (c1Comp.careerTeamName && r.name === c1Comp.careerTeamName) ||
     (c1Comp.userTeamName && r.name === c1Comp.userTeamName)
   );
