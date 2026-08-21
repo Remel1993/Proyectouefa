@@ -50,6 +50,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
   const { Shield } = ui;
   const [subTab, setSubTab] = useState<'match' | 'tactic' | 'groups' | 'bracket' | 'schedule' | 'objective'>('match');
   const [selectedGroupIdx, setSelectedGroupIdx] = useState<number | null>(null);
+  const [bracketRoundFilter, setBracketRoundFilter] = useState<'ALL' | string>('ALL');
 
   // Identificar el equipo del modo carrera dentro de la Champions (C1)
   const careerClTeam = useMemo(() => {
@@ -1252,21 +1253,46 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className='space-y-4'
+            className='space-y-4 pb-28'
           >
             {safeBracket ? (
-              <div className='space-y-2'>
+              <div className='space-y-3'>
+                {/* SELECTOR DE RONDA EN CHIPS */}
+                <div className='flex items-center gap-1.5 overflow-x-auto pb-1.5 custom-scrollbar -mx-1 px-1 touch-auto'>
+                  {['ALL', 'Octavos', 'Cuartos', 'Semis', 'Final'].map(rk => (
+                    <button
+                      key={rk}
+                      type='button'
+                      onClick={() => setBracketRoundFilter(rk)}
+                      className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all whitespace-nowrap ${
+                        bracketRoundFilter === rk
+                          ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg font-black scale-105 border border-blue-400/40'
+                          : 'bg-slate-900/70 text-slate-400 hover:text-white border border-white/10'
+                      }`}
+                    >
+                      {rk === 'ALL' ? 'Todas las Rondas' : clPhaseLabel(rk)}
+                    </button>
+                  ))}
+                </div>
+
                 <div className='flex items-center justify-between px-1 text-[8px] font-black uppercase text-slate-400'>
                   <span className='flex items-center gap-1 text-blue-400'>
                     <Trophy size={11} className='text-amber-400' /> Cuadro de Eliminatorias UEFA Champions League
                   </span>
                   <span className='flex items-center gap-1 text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10'>
-                    <span>← Desliza para explorar →</span>
+                    <span>{bracketRoundFilter === 'ALL' ? '← Desliza lateral y verticalmente →' : 'Vista de Ronda'}</span>
                   </span>
                 </div>
-                <div className='flex gap-4 overflow-x-auto pb-4 custom-scrollbar scroll-smooth -mx-1 px-1 touch-pan-x'>
-                {['Octavos', 'Cuartos', 'Semis', 'Final'].filter(p => safeBracket[p]).map(p => (
-                  <div key={p} className='min-w-[280px] sm:min-w-[310px] flex-shrink-0 space-y-2.5'>
+
+                <div className={`${
+                  bracketRoundFilter === 'ALL'
+                    ? 'flex gap-4 overflow-x-auto pb-6 custom-scrollbar scroll-smooth -mx-1 px-1 touch-auto'
+                    : 'grid grid-cols-1 md:grid-cols-2 gap-4'
+                }`}>
+                {['Octavos', 'Cuartos', 'Semis', 'Final']
+                  .filter(p => safeBracket[p] && (bracketRoundFilter === 'ALL' || bracketRoundFilter === p))
+                  .map(p => (
+                  <div key={p} className={`${bracketRoundFilter === 'ALL' ? 'min-w-[280px] sm:min-w-[310px] flex-shrink-0' : 'w-full'} space-y-2.5`}>
                     <div className='flex items-center justify-between bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 px-3.5 py-2 rounded-2xl border border-blue-500/30 shadow-md'>
                       <div>
                         <h4 className='text-[11px] font-black uppercase italic text-blue-300'>{clPhaseLabel(p)}</h4>
@@ -1499,8 +1525,8 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                   </div>
                 ))}
               </div>
-              </div>
-            ) : (
+            </div>
+          ) : (
               <div className='bg-slate-900/60 rounded-3xl p-8 text-center space-y-2 border border-white/5'>
                 <Trophy size={32} className='text-slate-500 mx-auto' />
                 <h4 className='text-xs font-black uppercase italic text-slate-300'>Cuadro de Eliminatorias no sorteado</h4>

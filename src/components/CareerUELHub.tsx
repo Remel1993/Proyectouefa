@@ -642,7 +642,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className='space-y-4'
+            className='space-y-4 pb-28'
           >
             {/* SELECTOR DE RONDA EN CHIPS HORIZONTALES */}
             <div className='flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar -mx-1 px-1'>
