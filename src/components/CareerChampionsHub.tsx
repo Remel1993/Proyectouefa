@@ -1295,24 +1295,26 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                         <span className='text-[8px] font-bold text-slate-400'>{p === 'Final' ? 'Partido Único (Sede Neutral)' : 'Eliminatoria Ida y Vuelta'}</span>
                       </div>
                       {p !== 'Final' ? (
-                        <div className='flex items-center gap-2 text-[8px] font-black uppercase tracking-wider text-slate-400'>
-                          <span className='w-7 text-center text-slate-300'>Ida</span>
-                          <span className='w-7 text-center text-slate-300'>Vta</span>
-                          <span className='w-9 text-center text-amber-300'>Glob</span>
+                        <div className='flex items-center gap-1 text-[7px] font-black uppercase tracking-wider text-slate-400'>
+                          <span className='w-4.5 text-center text-slate-300'>Ida</span>
+                          <span className='w-4.5 text-center text-slate-300'>Vta</span>
+                          <span className='w-5.5 text-center text-amber-300'>Glob</span>
                         </div>
                       ) : (
-                        <span className='text-[8px] font-black uppercase text-amber-400 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30'>Final</span>
+                        <span className='text-[7px] font-black uppercase text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30'>Final</span>
                       )}
                     </div>
 
-                    <div className='grid grid-cols-1 gap-2.5'>
+                    <div className='grid grid-cols-1 gap-2'>
                       {(Array.isArray(safeBracket[p]) ? safeBracket[p] : [safeBracket[p]]).filter(Boolean).map((m: any, mi: number) => {
                         const h = clComp.teams.find((t: any) => t.id === m.hId);
                         const a = clComp.teams.find((t: any) => t.id === m.aId);
                         const isMyMatch = m.hId === careerClTeam?.id || m.aId === careerClTeam?.id;
 
                         let winner = null;
+                        let isFinished = false;
                         if (p !== 'Final' ? (m.sh2 !== null && m.sh2 !== undefined) : (m.sh !== null && m.sh !== undefined)) {
+                          isFinished = true;
                           if (p !== 'Final') {
                             const totH = (m.sh || 0) + (m.sh2 || 0);
                             const totA = (m.sa || 0) + (m.sa2 || 0);
@@ -1332,38 +1334,43 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                         const totH = (m.sh || 0) + (m.sh2 || 0);
                         const totA = (m.sa || 0) + (m.sa2 || 0);
 
+                        const isWinnerH = isFinished && winner?.id === h?.id;
+                        const isLoserH = isFinished && winner && winner.id !== h?.id;
+                        const isWinnerA = isFinished && winner?.id === a?.id;
+                        const isLoserA = isFinished && winner && winner.id !== a?.id;
+
                         return (
                           <div
                             key={mi}
-                            className={`rounded-2xl p-3.5 border transition-all space-y-2 shadow-lg ${
+                            className={`rounded-2xl p-2.5 sm:p-3 border transition-all space-y-1.5 shadow-md ${
                               isMyMatch
                                 ? 'bg-gradient-to-br from-blue-950/90 via-slate-900/95 to-indigo-950/80 border-blue-400/70 shadow-blue-500/10 ring-1 ring-blue-500/30'
                                 : 'bg-slate-900/85 border-white/10'
                             }`}
                           >
                             {/* Cabecera del Cruce */}
-                            <div className='flex items-center justify-between text-[8px] font-black uppercase tracking-wider pb-1.5 border-b border-white/5'>
-                              <div className='flex items-center gap-1.5'>
-                                <span className='text-slate-400'>Llave {mi + 1}</span>
+                            <div className='flex items-center justify-between text-[7px] font-black uppercase tracking-wider pb-1 border-b border-white/5'>
+                              <div className='flex items-center gap-1.5 min-w-0'>
+                                <span className='text-slate-400 shrink-0'>Llave {mi + 1}</span>
                                 {isMyMatch && (
-                                  <span className='px-1.5 py-0.2 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/40 text-[7px]'>
-                                    Tu Partido
+                                  <span className='px-1.5 py-0.2 rounded-full bg-blue-500/30 text-blue-200 border border-blue-400/40 text-[6px] shrink-0'>
+                                    Tu Club
                                   </span>
                                 )}
                               </div>
 
                               {isTwoLegged ? (
-                                <span className={`px-2 py-0.5 rounded-full text-[7.5px] font-bold ${
+                                <span className={`px-1.5 py-0.5 rounded-full text-[6.5px] font-bold shrink-0 ${
                                   hasVuelta
                                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                                     : hasIda
                                     ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
                                     : 'bg-slate-800 text-slate-400 border border-white/10'
                                 }`}>
-                                  {hasVuelta ? `Global: ${totH} - ${totA}` : hasIda ? 'Ida disputada' : 'Por disputar'}
+                                  {hasVuelta ? `Global: ${totH}-${totA}` : hasIda ? 'Ida disputada' : 'Por disputar'}
                                 </span>
                               ) : (
-                                <span className={`px-2 py-0.5 rounded-full text-[7.5px] font-bold ${
+                                <span className={`px-1.5 py-0.5 rounded-full text-[6.5px] font-bold shrink-0 ${
                                   m.sh !== null ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'
                                 }`}>
                                   {m.sh !== null ? `Resultado: ${m.sh} - ${m.sa}` : 'Por disputar'}
@@ -1372,11 +1379,11 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                             </div>
 
                             {/* Fila Equipo 1 (Local en Ida / Equipo A) */}
-                            <div className='flex justify-between items-center py-1'>
-                              <div className='flex items-center gap-2 flex-1 min-w-0 pr-2'>
+                            <div className={`flex justify-between items-center py-0.5 transition-opacity ${isLoserH ? 'opacity-50' : 'opacity-100'}`}>
+                              <div className='flex items-center gap-1.5 flex-1 min-w-0 pr-1 overflow-hidden'>
                                 <Shield color1={h?.color1} color2={h?.color2} initial={h?.name} size='xs' isFlag={h?.isFlag} />
-                                <span className={`text-[10px] font-black uppercase italic truncate ${
-                                  winner?.id === h?.id
+                                <span className={`text-[8.5px] font-black uppercase italic truncate block max-w-full ${
+                                  isWinnerH
                                     ? 'text-yellow-300'
                                     : h?.id === careerClTeam?.id
                                     ? 'text-blue-300'
@@ -1386,28 +1393,34 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                                 }`}>
                                   {h?.name || 'Por Definir'}
                                 </span>
+                                {isWinnerH && <span className='text-[7px] font-black text-amber-400 shrink-0'>🏆</span>}
+                                {isLoserH && (
+                                  <span className='text-[5.5px] font-bold uppercase px-1 py-0.2 rounded bg-red-950/60 text-red-300 border border-red-500/20 shrink-0 whitespace-nowrap'>
+                                    Eliminado
+                                  </span>
+                                )}
                               </div>
 
                               {isTwoLegged ? (
-                                <div className='flex items-center gap-2 tabular-nums text-[10px] shrink-0'>
+                                <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-bold'>
                                   {/* Ida */}
-                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
-                                    hasIda ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
+                                  <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                    hasIda ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
                                   }`} title='Goles en Ida'>
                                     {hasIda ? m.sh : '—'}
                                   </span>
 
                                   {/* Vuelta */}
-                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
-                                    hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
+                                  <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                    hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
                                   }`} title='Goles en Vuelta'>
                                     {hasVuelta ? m.sh2 : '—'}
                                   </span>
 
                                   {/* Global */}
-                                  <span className={`w-9 text-center py-0.5 rounded-lg font-black shadow-sm ${
+                                  <span className={`w-5.5 text-center py-0.5 rounded text-[8px] font-black ${
                                     hasVuelta
-                                      ? (winner?.id === h?.id ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black' : 'bg-blue-900/60 text-blue-200 border border-blue-500/30')
+                                      ? (isWinnerH ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black' : 'bg-blue-900/60 text-blue-200 border border-blue-500/30')
                                       : 'text-slate-600'
                                   }`} title='Marcador Global Acumulado'>
                                     {hasVuelta ? totH : '—'}
@@ -1415,23 +1428,23 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
 
                                   {/* Penaltis si hubo */}
                                   {hasVuelta && m.penH !== null && m.penH !== undefined && (
-                                    <span className='text-amber-400 text-[8px] font-black bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30'>
-                                      ({m.penH})
+                                    <span className='text-[6.5px] font-black text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30 shrink-0'>
+                                      {m.penH}p
                                     </span>
                                   )}
                                 </div>
                               ) : (
-                                <div className='flex items-center gap-1.5 tabular-nums text-[11px] shrink-0'>
-                                  <span className={`px-2.5 py-0.5 rounded-lg font-black ${
+                                <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-black'>
+                                  <span className={`px-2 py-0.5 rounded ${
                                     m.sh !== null
-                                      ? (winner?.id === h?.id ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-white border border-white/10')
+                                      ? (isWinnerH ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-white border border-white/10')
                                       : 'text-slate-600'
                                   }`}>
                                     {m.sh !== null ? m.sh : '—'}
                                   </span>
                                   {m.penH !== null && m.penH !== undefined && (
-                                    <span className='text-amber-400 text-[8px] font-black bg-amber-500/20 px-1.5 py-0.5 rounded'>
-                                      ({m.penH} pen.)
+                                    <span className='text-[6.5px] font-bold text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30'>
+                                      {m.penH}p
                                     </span>
                                   )}
                                 </div>
@@ -1439,11 +1452,11 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                             </div>
 
                             {/* Fila Equipo 2 (Visitante en Ida / Equipo B) */}
-                            <div className='flex justify-between items-center py-1 border-t border-white/5'>
-                              <div className='flex items-center gap-2 flex-1 min-w-0 pr-2'>
+                            <div className={`flex justify-between items-center py-0.5 border-t border-white/5 transition-opacity ${isLoserA ? 'opacity-50' : 'opacity-100'}`}>
+                              <div className='flex items-center gap-1.5 flex-1 min-w-0 pr-1 overflow-hidden'>
                                 <Shield color1={a?.color1} color2={a?.color2} initial={a?.name} size='xs' isFlag={a?.isFlag} />
-                                <span className={`text-[10px] font-black uppercase italic truncate ${
-                                  winner?.id === a?.id
+                                <span className={`text-[8.5px] font-black uppercase italic truncate block max-w-full ${
+                                  isWinnerA
                                     ? 'text-yellow-300'
                                     : a?.id === careerClTeam?.id
                                     ? 'text-blue-300'
@@ -1453,28 +1466,34 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                                 }`}>
                                   {a?.name || 'Por Definir'}
                                 </span>
+                                {isWinnerA && <span className='text-[7px] font-black text-amber-400 shrink-0'>🏆</span>}
+                                {isLoserA && (
+                                  <span className='text-[5.5px] font-bold uppercase px-1 py-0.2 rounded bg-red-950/60 text-red-300 border border-red-500/20 shrink-0 whitespace-nowrap'>
+                                    Eliminado
+                                  </span>
+                                )}
                               </div>
 
                               {isTwoLegged ? (
-                                <div className='flex items-center gap-2 tabular-nums text-[10px] shrink-0'>
+                                <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-bold'>
                                   {/* Ida */}
-                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
-                                    hasIda ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
+                                  <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                    hasIda ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
                                   }`} title='Goles en Ida'>
                                     {hasIda ? m.sa : '—'}
                                   </span>
 
                                   {/* Vuelta */}
-                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
-                                    hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
+                                  <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                    hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
                                   }`} title='Goles en Vuelta'>
                                     {hasVuelta ? m.sa2 : '—'}
                                   </span>
 
                                   {/* Global */}
-                                  <span className={`w-9 text-center py-0.5 rounded-lg font-black shadow-sm ${
+                                  <span className={`w-5.5 text-center py-0.5 rounded text-[8px] font-black ${
                                     hasVuelta
-                                      ? (winner?.id === a?.id ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black' : 'bg-blue-900/60 text-blue-200 border border-blue-500/30')
+                                      ? (isWinnerA ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black' : 'bg-blue-900/60 text-blue-200 border border-blue-500/30')
                                       : 'text-slate-600'
                                   }`} title='Marcador Global Acumulado'>
                                     {hasVuelta ? totA : '—'}
@@ -1482,23 +1501,23 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
 
                                   {/* Penaltis si hubo */}
                                   {hasVuelta && m.penA !== null && m.penA !== undefined && (
-                                    <span className='text-amber-400 text-[8px] font-black bg-amber-500/20 px-1 py-0.5 rounded border border-amber-500/30'>
-                                      ({m.penA})
+                                    <span className='text-[6.5px] font-black text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30 shrink-0'>
+                                      {m.penA}p
                                     </span>
                                   )}
                                 </div>
                               ) : (
-                                <div className='flex items-center gap-1.5 tabular-nums text-[11px] shrink-0'>
-                                  <span className={`px-2.5 py-0.5 rounded-lg font-black ${
+                                <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-black'>
+                                  <span className={`px-2 py-0.5 rounded ${
                                     m.sa !== null
-                                      ? (winner?.id === a?.id ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-white border border-white/10')
+                                      ? (isWinnerA ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-white border border-white/10')
                                       : 'text-slate-600'
                                   }`}>
                                     {m.sa !== null ? m.sa : '—'}
                                   </span>
                                   {m.penA !== null && m.penA !== undefined && (
-                                    <span className='text-amber-400 text-[8px] font-black bg-amber-500/20 px-1.5 py-0.5 rounded'>
-                                      ({m.penA} pen.)
+                                    <span className='text-[6.5px] font-bold text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30'>
+                                      {m.penA}p
                                     </span>
                                   )}
                                 </div>

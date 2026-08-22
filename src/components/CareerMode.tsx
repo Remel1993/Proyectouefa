@@ -187,17 +187,6 @@ export const CareerSelectView = ({ candidates, leagueName, onBack, onStart, onSe
         </div>
 
         <div className='flex items-center gap-2'>
-          {onSetupVillarrealScenario && (
-            <button
-              onClick={onSetupVillarrealScenario}
-              className='bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 rounded-2xl px-3 py-2 text-[9px] font-black uppercase tracking-wider text-yellow-300 flex items-center gap-1.5 active:scale-95 transition-all shadow-md'
-              title='Cargar Escenario Hipotético: Villarreal CF en 5º puesto al final de temporada'
-            >
-              <Zap size={14} className='text-yellow-400' />
-              Villarreal 5º (Final Temp.)
-            </button>
-          )}
-
           {pastCareers && pastCareers.length > 0 && (
             <button
               onClick={() => setShowArchiveModal(true)}

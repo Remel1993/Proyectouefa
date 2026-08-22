@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award, CheckCircle, CheckCircle2, XCircle, Clock, Sparkles, Layers, ArrowLeft, RotateCcw, ShieldCheck, Dumbbell, Target, Globe, Flame, Lock, Swords } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { tacticalOptions, sameDist, getEuropaLeagueMatchKey } from '../lib/career';
+import { tacticalOptions, sameDist, getEuropaLeagueMatchKey, getEuropaLeagueObjectiveTarget, UEL_PHASE_ORDER } from '../lib/career';
+import { sanitizeChampionsBracket } from '../lib/championsSanitizer';
 
 export const uelPhaseLabel = (phase?: string) => {
   if (!phase) return 'Dieciseisavos';
@@ -75,8 +76,8 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
   const isFinished = uelComp?.showWinner || phase === 'Terminado';
 
   const safeBracket = useMemo(() => {
-    return uelComp?.bracket || { Dieciseisavos: [], Octavos: [], Cuartos: [], Semis: [], Final: [] };
-  }, [uelComp?.bracket]);
+    return sanitizeChampionsBracket(uelComp?.bracket, uelComp?.teams) || { Dieciseisavos: [], Octavos: [], Cuartos: [], Semis: [], Final: [] };
+  }, [uelComp?.bracket, uelComp?.teams]);
 
   // Base táctica y opciones
   const baseTactic = useMemo(() => ({
@@ -276,7 +277,67 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
   const isUserChampion = winnerTeam && careerUelTeam && winnerTeam.id === careerUelTeam.id;
   const isUserEliminated = !isNotQualified && careerUelTeam && !nextMatchInfo && !isUserChampion && (phase !== 'Dieciseisavos' || matchday > 0);
 
-  const objectiveInfo = useMemo(() => getUELObjectiveTarget(currentTier), [currentTier]);
+  // Objetivo continental en UEFA Europa League (calculado con sistema canónico)
+  const uelObjective = useMemo(() => {
+    const isDropped = Boolean(career?.droppedToUel);
+    const target = getEuropaLeagueObjectiveTarget(currentTier, isDropped);
+    const targetRank = UEL_PHASE_ORDER.indexOf(target.targetPhase);
+    const currentRank = UEL_PHASE_ORDER.indexOf(phase || 'Dieciseisavos');
+
+    let done = false;
+    let progress = 25;
+    let status: 'completed' | 'on_track' | 'at_risk' | 'failed' = 'on_track';
+    let statusLabel = 'En Carrera (UEL)';
+
+    if (isNotQualified) {
+      done = false;
+      progress = 0;
+      status = 'failed';
+      statusLabel = 'No Clasificado';
+    } else if (isUserChampion) {
+      done = true;
+      progress = 100;
+      status = 'completed';
+      statusLabel = '¡Campeón de Europa League!';
+    } else if (isUserEliminated) {
+      if (currentRank >= targetRank) {
+        done = true;
+        progress = 100;
+        status = 'completed';
+        statusLabel = 'Objetivo Cumplido';
+      } else {
+        done = false;
+        progress = Math.max(15, Math.round((Math.max(1, currentRank) / (targetRank || 1)) * 80));
+        status = 'failed';
+        statusLabel = 'Eliminado en UEL';
+      }
+    } else if (isFinished && !isUserChampion) {
+      if (currentRank >= targetRank) {
+        done = true;
+        progress = 100;
+        status = 'completed';
+        statusLabel = 'Objetivo Cumplido';
+      } else {
+        done = false;
+        status = 'failed';
+        statusLabel = 'No Alcanzado';
+      }
+    } else {
+      if (currentRank >= targetRank) {
+        done = true;
+        progress = 100;
+        status = 'completed';
+        statusLabel = 'Objetivo Alcanzado';
+      } else {
+        done = false;
+        progress = Math.max(25, Math.min(90, Math.round(((currentRank + 1) / (targetRank + 1)) * 90)));
+        status = 'on_track';
+        statusLabel = `En ${uelPhaseLabel(phase)}`;
+      }
+    }
+
+    return { target, done, progress, status, statusLabel };
+  }, [currentTier, career?.droppedToUel, phase, isNotQualified, isUserChampion, isUserEliminated, isFinished]);
 
   return (
     <div className='flex-grow px-3 pb-24 flex flex-col space-y-4'>
@@ -313,8 +374,22 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
             </div>
           </div>
 
-          <div className='text-right shrink-0'>
-            <div className='text-[9px] font-bold text-slate-300 bg-black/40 px-2.5 py-1 rounded-xl border border-white/10'>
+          <div className='flex items-center gap-2 shrink-0'>
+            {/* Botón directo para Ver Llaves */}
+            <button
+              onClick={() => setSubTab('bracket')}
+              className={`px-3 py-1.5 rounded-xl border flex items-center gap-1.5 text-[8.5px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-md cursor-pointer ${
+                subTab === 'bracket'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 border-amber-300 font-black'
+                  : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40'
+              }`}
+              title='Ver cómo van las llaves del torneo'
+            >
+              <Layers size={13} />
+              <span>Ver Llaves</span>
+            </button>
+
+            <div className='hidden sm:block text-[9px] font-bold text-slate-300 bg-black/40 px-2.5 py-1.5 rounded-xl border border-white/10'>
               Fuerza: <span className='text-amber-400 font-black'>{effectiveTactic.att}/{effectiveTactic.opp}/{effectiveTactic.def}</span>
             </div>
           </div>
@@ -324,7 +399,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
         <div className='grid grid-cols-6 gap-1 mt-4 bg-slate-900/70 p-1 rounded-2xl border border-white/5'>
           {[
             { id: 'match', label: 'Partido', icon: Dices },
-            { id: 'bracket', label: 'Cuadro', icon: Layers },
+            { id: 'bracket', label: 'Llaves', icon: Layers },
             { id: 'schedule', label: 'Partidos', icon: Calendar },
             { id: 'teams', label: 'Clubes', icon: Globe },
             { id: 'objective', label: 'Objetivo', icon: Target },
@@ -336,14 +411,14 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
               <button
                 key={tabItem.id}
                 onClick={() => setSubTab(tabItem.id as any)}
-                className={`py-1.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all ${
+                className={`py-1.5 px-1 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer ${
                   active
                     ? 'bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-black shadow-md'
                     : 'text-slate-400 hover:text-white font-bold'
                 }`}
               >
                 <Icon size={13} className={active ? 'text-slate-950' : 'text-slate-400'} />
-                <span className='text-[7px] uppercase tracking-tight truncate mt-0.5'>{tabItem.label}</span>
+                <span className='text-[7.5px] uppercase tracking-tight truncate mt-0.5'>{tabItem.label}</span>
               </button>
             );
           })}
@@ -699,21 +774,21 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                       <span className='text-[8px] font-bold text-slate-400'>{roundKey === 'Final' ? 'Partido Único (Sede Neutral)' : 'Eliminatoria Ida y Vuelta'}</span>
                     </div>
                     {isTwoLegged ? (
-                      <div className='flex items-center gap-2 text-[7.5px] font-black uppercase tracking-wider text-slate-400'>
-                        <span className='w-6 text-center text-slate-300'>Ida</span>
-                        <span className='w-6 text-center text-slate-300'>Vta</span>
-                        <span className='w-8 text-center text-amber-300'>Glob</span>
+                      <div className='flex items-center gap-1 text-[7px] font-black uppercase tracking-wider text-slate-400'>
+                        <span className='w-4.5 text-center text-slate-300'>Ida</span>
+                        <span className='w-4.5 text-center text-slate-300'>Vta</span>
+                        <span className='w-5.5 text-center text-amber-300'>Glob</span>
                       </div>
                     ) : (
-                      <span className='text-[8px] font-black uppercase text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30'>Final</span>
+                      <span className='text-[7px] font-black uppercase text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30'>Final</span>
                     )}
                   </div>
 
-                  <div className='grid gap-2.5'>
+                  <div className='grid gap-2'>
                     {matches.map((m: any, idx: number) => {
                       if (!m) return null;
-                      const h = uelComp?.teams?.find((t: any) => t.id === m.hId) || { name: 'Por definir' };
-                      const a = uelComp?.teams?.find((t: any) => t.id === m.aId) || { name: 'Por definir' };
+                      const h = uelComp?.teams?.find((t: any) => t.id === m.hId) || (m.hId ? { name: `Equipo ${m.hId}` } : null);
+                      const a = uelComp?.teams?.find((t: any) => t.id === m.aId) || (m.aId ? { name: `Equipo ${m.aId}` } : null);
                       const isUserMatch = careerUelTeam && (m.hId === careerUelTeam.id || m.aId === careerUelTeam.id);
 
                       const hasIda = m.sh !== null && m.sh !== undefined && m.sa !== null && m.sa !== undefined;
@@ -721,62 +796,79 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                       const totH = (m.sh || 0) + (m.sh2 || 0);
                       const totA = (m.sa || 0) + (m.sa2 || 0);
 
-                      let winnerId: string | null = null;
+                      let winnerId: string | number | null = null;
+                      let isFinishedMatch = false;
+
                       if (!isTwoLegged && hasIda) {
+                        isFinishedMatch = true;
                         if (m.sh > m.sa) winnerId = m.hId;
                         else if (m.sa > m.sh) winnerId = m.aId;
                         else if (m.penH !== null && m.penH !== undefined) winnerId = m.penH > m.penA ? m.hId : m.aId;
                       } else if (hasVuelta) {
+                        isFinishedMatch = true;
                         if (totH > totA) winnerId = m.hId;
                         else if (totA > totH) winnerId = m.aId;
                         else if (m.penH !== null && m.penH !== undefined) winnerId = m.penH > m.penA ? m.hId : m.aId;
                       }
 
+                      const isWinnerH = isFinishedMatch && winnerId === m.hId;
+                      const isLoserH = isFinishedMatch && winnerId !== null && winnerId !== m.hId;
+                      const isWinnerA = isFinishedMatch && winnerId === m.aId;
+                      const isLoserA = isFinishedMatch && winnerId !== null && winnerId !== m.aId;
+
+                      const isUserEliminatedInMatch = isUserMatch && isFinishedMatch && ((m.hId === careerUelTeam?.id && isLoserH) || (m.aId === careerUelTeam?.id && isLoserA));
+
                       return (
                         <div
                           key={m.id || idx}
-                          className={`rounded-2xl p-3 border transition-all space-y-1.5 ${
+                          className={`rounded-2xl p-2.5 sm:p-3 border transition-all space-y-1.5 ${
                             isUserMatch
-                              ? 'bg-gradient-to-br from-amber-950/80 via-slate-900/95 to-orange-950/70 border-amber-400/60 shadow-lg ring-1 ring-amber-500/30'
+                              ? isUserEliminatedInMatch
+                                ? 'bg-gradient-to-br from-red-950/40 via-slate-900/90 to-slate-950/90 border-red-500/30 ring-1 ring-red-500/20'
+                                : 'bg-gradient-to-br from-amber-950/80 via-slate-900/95 to-orange-950/70 border-amber-400/60 shadow-lg ring-1 ring-amber-500/30'
                               : 'bg-black/40 border-white/10'
                           }`}
                         >
                           {/* Cabecera del Cruce */}
-                          <div className='flex items-center justify-between text-[8px] font-black uppercase tracking-wider pb-1 border-b border-white/5'>
-                            <div className='flex items-center gap-1.5'>
-                              <span className='text-slate-400'>Llave {idx + 1}</span>
+                          <div className='flex items-center justify-between text-[7px] font-black uppercase tracking-wider pb-1 border-b border-white/5'>
+                            <div className='flex items-center gap-1.5 min-w-0'>
+                              <span className='text-slate-400 shrink-0'>Llave {idx + 1}</span>
                               {isUserMatch && (
-                                <span className='px-1.5 py-0.2 rounded-full bg-amber-500/30 text-amber-200 border border-amber-400/40 text-[7px]'>
-                                  Tu Club
+                                <span className={`px-1.5 py-0.2 rounded-full text-[6px] font-black border shrink-0 ${
+                                  isUserEliminatedInMatch
+                                    ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                                    : 'bg-amber-500/30 text-amber-200 border-amber-400/40'
+                                }`}>
+                                  {isUserEliminatedInMatch ? 'Tu Club (Eliminado)' : 'Tu Club'}
                                 </span>
                               )}
                             </div>
 
                             {isTwoLegged ? (
-                              <span className={`px-2 py-0.5 rounded-full text-[7.5px] font-bold ${
+                              <span className={`px-1.5 py-0.5 rounded-full text-[6.5px] font-bold shrink-0 ${
                                 hasVuelta
                                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                                   : hasIda
                                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                                   : 'bg-slate-800 text-slate-400 border border-white/10'
                               }`}>
-                                {hasVuelta ? `Global: ${totH} - ${totA}` : hasIda ? 'Ida disputada' : 'Por disputar'}
+                                {hasVuelta ? `Global: ${totH}-${totA}` : hasIda ? 'Ida jugada' : 'Por disputar'}
                               </span>
                             ) : (
-                              <span className={`px-2 py-0.5 rounded-full text-[7.5px] font-bold ${
+                              <span className={`px-1.5 py-0.5 rounded-full text-[6.5px] font-bold shrink-0 ${
                                 hasIda ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'
                               }`}>
-                                {hasIda ? `Resultado: ${m.sh} - ${m.sa}` : 'Por disputar'}
+                                {hasIda ? `Final: ${m.sh}-${m.sa}` : 'Por disputar'}
                               </span>
                             )}
                           </div>
 
                           {/* Fila Equipo Local */}
-                          <div className='flex justify-between items-center py-1'>
-                            <div className='flex items-center gap-2 flex-1 min-w-0 pr-2'>
+                          <div className={`flex justify-between items-center py-0.5 transition-opacity ${isLoserH ? 'opacity-50' : 'opacity-100'}`}>
+                            <div className='flex items-center gap-1.5 flex-1 min-w-0 pr-1 overflow-hidden'>
                               <Shield color1={h?.color1} color2={h?.color2} initial={h?.name} size='xs' isFlag={h?.isFlag} />
-                              <span className={`text-[10px] font-black uppercase italic truncate ${
-                                winnerId === h?.id
+                              <span className={`text-[8.5px] font-black uppercase italic truncate block max-w-full ${
+                                isWinnerH
                                   ? 'text-amber-300'
                                   : h?.id === careerUelTeam?.id
                                   ? 'text-amber-200'
@@ -786,51 +878,56 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                               }`}>
                                 {h?.name || 'Por Definir'}
                               </span>
-                              {winnerId === h?.id && <span className='text-[8px] font-black text-amber-400'>🏆</span>}
+                              {isWinnerH && <span className='text-[7px] font-black text-amber-400 shrink-0'>🏆</span>}
+                              {isLoserH && (
+                                <span className='text-[5.5px] font-bold uppercase px-1 py-0.2 rounded bg-red-950/60 text-red-300 border border-red-500/20 shrink-0 whitespace-nowrap'>
+                                  Eliminado
+                                </span>
+                              )}
                             </div>
 
                             {isTwoLegged ? (
-                              <div className='flex items-center gap-2 tabular-nums text-[10px] shrink-0'>
+                              <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-bold'>
                                 {/* Ida */}
-                                <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
-                                  hasIda ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
-                                }`} title='Goles en Ida'>
+                                <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                  hasIda ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
+                                }`} title='Goles Ida'>
                                   {hasIda ? m.sh : '—'}
                                 </span>
 
                                 {/* Vuelta */}
-                                <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
-                                  hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
-                                }`} title='Goles en Vuelta'>
+                                <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                  hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
+                                }`} title='Goles Vuelta'>
                                   {hasVuelta ? m.sh2 : '—'}
                                 </span>
 
                                 {/* Global */}
-                                <span className={`w-8 text-center py-0.5 rounded-lg font-black shadow-sm ${
+                                <span className={`w-5.5 text-center py-0.5 rounded text-[8px] font-black ${
                                   hasVuelta
-                                    ? (winnerId === h?.id ? 'bg-gradient-to-r from-amber-500 to-orange-400 text-slate-950 font-black' : 'bg-amber-950/60 text-amber-200 border border-amber-500/30')
+                                    ? (isWinnerH ? 'bg-gradient-to-r from-amber-500 to-orange-400 text-slate-950 font-black' : 'bg-amber-950/60 text-amber-200 border border-amber-500/30')
                                     : 'text-slate-600'
-                                }`} title='Marcador Global Acumulado'>
+                                }`} title='Global'>
                                   {hasVuelta ? totH : '—'}
                                 </span>
 
                                 {/* Penaltis */}
-                                {m.penH !== null && m.penH !== undefined && (
-                                  <span className='text-[8px] font-bold text-amber-300 ml-0.5'>
-                                    ({m.penH}p)
+                                {hasVuelta && m.penH !== null && m.penH !== undefined && (
+                                  <span className='text-[6.5px] font-black text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30 shrink-0'>
+                                    {m.penH}p
                                   </span>
                                 )}
                               </div>
                             ) : (
-                              <div className='flex items-center gap-2 tabular-nums text-[11px] shrink-0 font-black'>
-                                <span className={`px-2.5 py-0.5 rounded-lg ${
-                                  hasIda ? (winnerId === h?.id ? 'bg-amber-500 text-slate-950 font-black' : 'bg-black/60 text-white border border-white/10') : 'text-slate-600'
+                              <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-black'>
+                                <span className={`px-2 py-0.5 rounded ${
+                                  hasIda ? (isWinnerH ? 'bg-amber-500 text-slate-950 font-black' : 'bg-black/60 text-white border border-white/10') : 'text-slate-600'
                                 }`}>
                                   {hasIda ? m.sh : '—'}
                                 </span>
                                 {m.penH !== null && m.penH !== undefined && (
-                                  <span className='text-[8px] font-bold text-amber-300'>
-                                    ({m.penH}p)
+                                  <span className='text-[6.5px] font-bold text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30'>
+                                    {m.penH}p
                                   </span>
                                 )}
                               </div>
@@ -838,11 +935,11 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                           </div>
 
                           {/* Fila Equipo Visitante */}
-                          <div className='flex justify-between items-center py-1 border-t border-white/5'>
-                            <div className='flex items-center gap-2 flex-1 min-w-0 pr-2'>
+                          <div className={`flex justify-between items-center py-0.5 border-t border-white/5 transition-opacity ${isLoserA ? 'opacity-50' : 'opacity-100'}`}>
+                            <div className='flex items-center gap-1.5 flex-1 min-w-0 pr-1 overflow-hidden'>
                               <Shield color1={a?.color1} color2={a?.color2} initial={a?.name} size='xs' isFlag={a?.isFlag} />
-                              <span className={`text-[10px] font-black uppercase italic truncate ${
-                                winnerId === a?.id
+                              <span className={`text-[8.5px] font-black uppercase italic truncate block max-w-full ${
+                                isWinnerA
                                   ? 'text-amber-300'
                                   : a?.id === careerUelTeam?.id
                                   ? 'text-amber-200'
@@ -852,51 +949,56 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                               }`}>
                                 {a?.name || 'Por Definir'}
                               </span>
-                              {winnerId === a?.id && <span className='text-[8px] font-black text-amber-400'>🏆</span>}
+                              {isWinnerA && <span className='text-[7px] font-black text-amber-400 shrink-0'>🏆</span>}
+                              {isLoserA && (
+                                <span className='text-[5.5px] font-bold uppercase px-1 py-0.2 rounded bg-red-950/60 text-red-300 border border-red-500/20 shrink-0 whitespace-nowrap'>
+                                  Eliminado
+                                </span>
+                              )}
                             </div>
 
                             {isTwoLegged ? (
-                              <div className='flex items-center gap-2 tabular-nums text-[10px] shrink-0'>
+                              <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-bold'>
                                 {/* Ida */}
-                                <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
-                                  hasIda ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
-                                }`} title='Goles en Ida'>
+                                <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                  hasIda ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
+                                }`} title='Goles Ida'>
                                   {hasIda ? m.sa : '—'}
                                 </span>
 
                                 {/* Vuelta */}
-                                <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
-                                  hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
-                                }`} title='Goles en Vuelta'>
+                                <span className={`w-4.5 text-center py-0.5 rounded text-[8px] ${
+                                  hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5 font-extrabold' : 'text-slate-600'
+                                }`} title='Goles Vuelta'>
                                   {hasVuelta ? m.sa2 : '—'}
                                 </span>
 
                                 {/* Global */}
-                                <span className={`w-8 text-center py-0.5 rounded-lg font-black shadow-sm ${
+                                <span className={`w-5.5 text-center py-0.5 rounded text-[8px] font-black ${
                                   hasVuelta
-                                    ? (winnerId === a?.id ? 'bg-gradient-to-r from-amber-500 to-orange-400 text-slate-950 font-black' : 'bg-amber-950/60 text-amber-200 border border-amber-500/30')
+                                    ? (isWinnerA ? 'bg-gradient-to-r from-amber-500 to-orange-400 text-slate-950 font-black' : 'bg-amber-950/60 text-amber-200 border border-amber-500/30')
                                     : 'text-slate-600'
-                                }`} title='Marcador Global Acumulado'>
+                                }`} title='Global'>
                                   {hasVuelta ? totA : '—'}
                                 </span>
 
                                 {/* Penaltis */}
-                                {m.penA !== null && m.penA !== undefined && (
-                                  <span className='text-[8px] font-bold text-amber-300 ml-0.5'>
-                                    ({m.penA}p)
+                                {hasVuelta && m.penA !== null && m.penA !== undefined && (
+                                  <span className='text-[6.5px] font-black text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30 shrink-0'>
+                                    {m.penA}p
                                   </span>
                                 )}
                               </div>
                             ) : (
-                              <div className='flex items-center gap-2 tabular-nums text-[11px] shrink-0 font-black'>
-                                <span className={`px-2.5 py-0.5 rounded-lg ${
-                                  hasIda ? (winnerId === a?.id ? 'bg-amber-500 text-slate-950 font-black' : 'bg-black/60 text-white border border-white/10') : 'text-slate-600'
+                              <div className='flex items-center gap-1 tabular-nums text-[8px] shrink-0 font-black'>
+                                <span className={`px-2 py-0.5 rounded ${
+                                  hasIda ? (isWinnerA ? 'bg-amber-500 text-slate-950 font-black' : 'bg-black/60 text-white border border-white/10') : 'text-slate-600'
                                 }`}>
                                   {hasIda ? m.sa : '—'}
                                 </span>
                                 {m.penA !== null && m.penA !== undefined && (
-                                  <span className='text-[8px] font-bold text-amber-300'>
-                                    ({m.penA}p)
+                                  <span className='text-[6.5px] font-bold text-amber-300 bg-amber-500/20 px-1 py-0.2 rounded border border-amber-500/30'>
+                                    {m.penA}p
                                   </span>
                                 )}
                               </div>
@@ -1018,33 +1120,105 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
             exit={{ opacity: 0, y: -8 }}
             className='space-y-4'
           >
-            <div className='bg-slate-900/60 backdrop-blur-md rounded-3xl p-5 border border-amber-500/30 shadow-xl space-y-3'>
-              <div className='flex items-center gap-3'>
-                <div className='w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0'>
-                  <Target size={20} />
-                </div>
+            <div className='bg-slate-900/80 backdrop-blur-md rounded-3xl p-5 border border-amber-500/30 space-y-4 shadow-xl'>
+              <div className='flex items-center justify-between'>
                 <div>
-                  <span className='text-[8px] font-black uppercase text-amber-400'>
-                    Exigencia de la Junta Directiva
-                  </span>
-                  <h3 className='text-xs font-black uppercase text-white italic'>
-                    {objectiveInfo.label}
+                  <p className='text-[9px] font-black uppercase tracking-widest text-amber-400'>
+                    Directiva Continental
+                  </p>
+                  <h3 className='text-base font-black uppercase italic text-white mt-0.5'>
+                    Exigencia en UEFA Europa League
                   </h3>
                 </div>
+                <span className={`px-2.5 py-1 rounded-full text-[8.5px] font-black uppercase tracking-wider border ${
+                  uelObjective.status === 'completed'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    : uelObjective.status === 'failed'
+                    ? 'bg-red-500/20 text-red-300 border-red-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                }`}>
+                  {uelObjective.statusLabel}
+                </span>
               </div>
-              <p className='text-[10px] text-slate-300 leading-relaxed'>
-                {objectiveInfo.desc}
-              </p>
-              <div className='bg-black/40 p-3 rounded-2xl border border-white/5 space-y-1.5'>
-                <div className='flex justify-between text-[8px] font-bold text-slate-400'>
-                  <span>Ronda Objetivo Mínima:</span>
-                  <span className='text-amber-300 font-black'>{uelPhaseLabel(objectiveInfo.target)}</span>
+
+              {/* Tarjeta de Meta Principal */}
+              <div className='bg-black/40 rounded-2xl p-4 border border-white/5 space-y-3'>
+                <div className='flex items-start gap-3'>
+                  <div className='w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30 shrink-0 mt-0.5'>
+                    <Trophy size={20} />
+                  </div>
+                  <div className='min-w-0 flex-1'>
+                    <h4 className='text-sm font-black uppercase italic text-white truncate'>
+                      {uelObjective.target.label}
+                    </h4>
+                    <p className='text-[10px] text-slate-300 mt-0.5 leading-relaxed'>
+                      {uelObjective.target.detail}
+                    </p>
+                    <p className='text-[8.5px] font-bold text-amber-400 mt-1 uppercase'>
+                      Meta Mínima Exigida: {uelObjective.target.targetValue}
+                    </p>
+                  </div>
                 </div>
-                <div className='flex justify-between text-[8px] font-bold text-slate-400'>
-                  <span>Estado Actual:</span>
-                  <span className='text-white font-black'>{uelPhaseLabel(phase)}</span>
+
+                {/* Barra de Progreso */}
+                <div className='space-y-1.5 pt-1'>
+                  <div className='flex justify-between text-[8px] font-black uppercase tracking-wider text-slate-400'>
+                    <span>Progreso en Europa League</span>
+                    <span className='text-white font-bold'>{uelObjective.progress}%</span>
+                  </div>
+                  <div className='w-full bg-slate-800 h-2.5 rounded-full overflow-hidden border border-white/5'>
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        uelObjective.status === 'completed'
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                          : uelObjective.status === 'failed'
+                          ? 'bg-gradient-to-r from-red-600 to-rose-500'
+                          : 'bg-gradient-to-r from-amber-500 to-orange-500'
+                      }`}
+                      style={{ width: `${uelObjective.progress}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Comparativa de Fases */}
+                <div className='bg-slate-900/60 p-3 rounded-xl border border-white/5 grid grid-cols-2 gap-2 text-center'>
+                  <div>
+                    <span className='text-[7.5px] font-bold uppercase text-slate-400 block'>Ronda Objetivo:</span>
+                    <span className='text-[9.5px] font-black text-amber-300 uppercase'>
+                      {uelPhaseLabel(uelObjective.target.targetPhase)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className='text-[7.5px] font-bold uppercase text-slate-400 block'>Ronda Actual:</span>
+                    <span className='text-[9.5px] font-black text-white uppercase'>
+                      {isFinished ? 'Finalizado' : uelPhaseLabel(phase)}
+                    </span>
+                  </div>
                 </div>
               </div>
+
+              {/* Beneficios por Cumplimiento */}
+              <div className='grid grid-cols-2 gap-2.5'>
+                <div className='bg-black/30 rounded-2xl p-3 border border-white/5 space-y-1'>
+                  <p className='text-[8px] font-black uppercase text-slate-400'>Puntos de Entrenamiento</p>
+                  <p className='text-xs font-black text-emerald-400'>+{uelObjective.target.pe} PE</p>
+                  <p className='text-[7.5px] text-slate-400'>Recompensa otorgada al final de curso</p>
+                </div>
+                <div className='bg-black/30 rounded-2xl p-3 border border-white/5 space-y-1'>
+                  <p className='text-[8px] font-black uppercase text-slate-400'>Prestigio Continental</p>
+                  <p className='text-xs font-black text-amber-300'>+{uelObjective.target.rep} Reputación</p>
+                  <p className='text-[7.5px] text-slate-400'>Impacta en la valoración de banquillos</p>
+                </div>
+              </div>
+
+              {/* Botón directo para Ver Cuadro de Llaves */}
+              <button
+                onClick={() => setSubTab('bracket')}
+                className='w-full py-3 bg-gradient-to-r from-amber-600/30 to-orange-600/30 hover:from-amber-600/50 hover:to-orange-600/50 text-amber-200 border border-amber-500/30 rounded-2xl text-[9px] font-black uppercase italic tracking-wider flex items-center justify-center gap-2 active:scale-95 transition-all cursor-pointer shadow-md'
+              >
+                <Layers size={14} className='text-amber-400' />
+                <span>Explorar Cuadro de Llaves UEL</span>
+              </button>
             </div>
           </motion.div>
         )}
@@ -1058,14 +1232,14 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
             exit={{ opacity: 0, y: -8 }}
             className='space-y-3'
           >
-            <div className='bg-slate-900/60 backdrop-blur-md rounded-3xl p-5 border border-white/10 space-y-4 shadow-xl'>
+            <div className='bg-slate-900/80 backdrop-blur-md rounded-3xl p-5 border border-amber-500/30 space-y-4 shadow-xl'>
               <div className='flex items-center justify-between border-b border-white/5 pb-3'>
                 <div>
-                  <span className='text-[8px] font-black uppercase tracking-wider text-amber-400'>
-                    Estrategia Continental
+                  <span className='text-[9px] font-black uppercase tracking-wider text-amber-400'>
+                    Pizarra Táctica · {totalTeamStrength} Puntos de Fuerza
                   </span>
-                  <h3 className='text-xs font-black uppercase text-white italic'>
-                    Esquema Táctico para Noche Europea
+                  <h3 className='text-base font-black uppercase italic text-white mt-0.5'>
+                    Esquema para Noche Europea
                   </h3>
                 </div>
                 <div className='w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30'>
@@ -1080,21 +1254,22 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                 </p>
               </div>
 
+              {/* Grid de opciones tácticas */}
               <div className='grid grid-cols-2 sm:grid-cols-3 gap-2.5'>
                 {tacticOptionsList.map((o: any) => {
-                  const isSelected = sameDist(effectiveTactic, o);
+                  const isSelected = sameDist(effectiveTactic, o) || sameDist(career?.tactic, o);
                   return (
                     <button
                       key={`${o.att}-${o.opp}-${o.def}`}
                       onClick={() => onSetTactic && onSetTactic(o)}
-                      className={`py-3.5 px-3 rounded-2xl border text-center transition-all active:scale-95 shadow ${
+                      className={`py-3.5 px-3 rounded-2xl border text-center transition-all active:scale-95 shadow cursor-pointer ${
                         isSelected
-                          ? 'bg-gradient-to-br from-amber-500 to-orange-500 border-amber-300 text-slate-950 font-black'
+                          ? 'bg-gradient-to-br from-amber-400 to-orange-500 border-amber-300 text-slate-950 font-black ring-2 ring-amber-400/40'
                           : 'bg-slate-900/60 hover:bg-slate-800 border-white/10 text-white'
                       }`}
                     >
                       <p className='text-base font-black italic tabular-nums'>{o.att}-{o.opp}-{o.def}</p>
-                      <p className={`text-[7px] font-black uppercase tracking-wider ${isSelected ? 'text-slate-950/80' : 'text-slate-400'}`}>
+                      <p className={`text-[7px] font-black uppercase tracking-wider ${isSelected ? 'text-slate-950/90 font-black' : 'text-slate-400'}`}>
                         ATT · OPP · DEF
                       </p>
                     </button>
@@ -1107,7 +1282,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                 {onOpenTraining && (
                   <button
                     onClick={onOpenTraining}
-                    className='p-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[9px] font-black uppercase italic tracking-wider flex items-center justify-center gap-1.5 active:scale-95 shadow'
+                    className='p-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-[9px] font-black uppercase italic tracking-wider flex items-center justify-center gap-1.5 active:scale-95 shadow cursor-pointer'
                   >
                     <Dumbbell size={14} /> Subir Atributos ({career?.pe || 0} PE)
                   </button>
@@ -1116,9 +1291,14 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                   <button
                     onClick={onOpenDrill}
                     disabled={hasTrainedThisUelMatch}
-                    className='p-3 rounded-2xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-[9px] font-black uppercase italic tracking-wider flex items-center justify-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none active:scale-95 shadow'
+                    className={`p-3 rounded-2xl text-[9px] font-black uppercase italic tracking-wider border flex items-center justify-center gap-1.5 active:scale-95 transition-all ${
+                      hasTrainedThisUelMatch
+                        ? 'bg-slate-800/40 border-white/5 text-slate-500 cursor-not-allowed opacity-60'
+                        : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-white/10 cursor-pointer'
+                    }`}
                   >
-                    <ShieldCheck size={14} /> {hasTrainedThisUelMatch ? 'Entrenamiento Realizado' : 'Entrenamiento de Intensidad'}
+                    <Dices size={14} className={hasTrainedThisUelMatch ? 'text-slate-500' : 'text-amber-400'} />
+                    <span>{hasTrainedThisUelMatch ? 'Sesión Hecha (1D6)' : 'Lanzar Dado de Entreno (1D6)'}</span>
                   </button>
                 )}
               </div>
