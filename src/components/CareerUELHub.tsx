@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Trophy, Dices, Zap, Shield as ShieldIcon, ChevronRight, Calendar, Award, CheckCircle, CheckCircle2, XCircle, Clock, Sparkles, Layers, ArrowLeft, RotateCcw, ShieldCheck, Dumbbell, Target, Globe, Flame, Lock, Swords } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { tacticalOptions, sameDist, getEuropaLeagueMatchKey, getEuropaLeagueObjectiveTarget, UEL_PHASE_ORDER } from '../lib/career';
-import { sanitizeChampionsBracket } from '../lib/championsSanitizer';
+import { sanitizeChampionsBracket, sanitizeEuropaLeagueTeams } from '../lib/championsSanitizer';
 
 export const uelPhaseLabel = (phase?: string) => {
   if (!phase) return 'Dieciseisavos';
@@ -27,6 +27,7 @@ export interface CareerUELHubProps {
   team: any;
   uelComp: any;
   uelInfo: any;
+  clComp?: any;
   onPlayUelMatch: () => void;
   onSimulateUelMatch: () => void;
   onSimulateAllUel?: () => void;
@@ -46,6 +47,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
   team,
   uelComp,
   uelInfo,
+  clComp,
   onPlayUelMatch,
   onSimulateUelMatch,
   onSimulateAllUel,
@@ -63,21 +65,45 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
   const [subTab, setSubTab] = useState<'match' | 'tactic' | 'bracket' | 'schedule' | 'teams' | 'objective'>('match');
   const [bracketRoundFilter, setBracketRoundFilter] = useState<'ALL' | string>('ALL');
 
+  // Sanitizar equipos y evitar duplicados de Champions en UEL
+  const safeUelComp = useMemo(() => {
+    return sanitizeEuropaLeagueTeams(uelComp);
+  }, [uelComp]);
+
   // Identificar el equipo del modo carrera dentro de la UEFA Europa League (C3)
   const careerUelTeam = useMemo(() => {
-    if (!uelComp?.teams?.length || !team) return null;
-    return uelComp.teams.find((t: any) => t.id === uelComp.careerTeamId) ||
-      uelComp.teams.find((t: any) => t.name === (uelComp.careerTeamName || team.name)) ||
-      uelComp.teams.find((t: any) => t.id === uelComp.userTeamId) || null;
-  }, [uelComp, team]);
+    if (!safeUelComp?.teams?.length || !team) return null;
+    return safeUelComp.teams.find((t: any) => t.id === safeUelComp.careerTeamId) ||
+      safeUelComp.teams.find((t: any) => t.name === (safeUelComp.careerTeamName || team.name)) ||
+      safeUelComp.teams.find((t: any) => t.id === safeUelComp.userTeamId) || null;
+  }, [safeUelComp, team]);
 
-  const phase = uelComp?.phase || 'Dieciseisavos';
-  const matchday = uelComp?.matchday || 0;
-  const isFinished = uelComp?.showWinner || phase === 'Terminado';
+  const phase = safeUelComp?.phase || 'Dieciseisavos';
+  const matchday = safeUelComp?.matchday || 0;
+
+  // Verificación cronológica y de fase de grupos de Champions League
+  const isClGroupsFinished = Boolean(!clComp || clComp.phase !== 'groups' || (clComp.matchday || 0) >= 6);
+
+  // Semana oficial del calendario para la ronda actual de Europa League
+  const expectedWeekForPhase = useMemo(() => {
+    if (phase === 'Dieciseisavos') return (matchday % 2 === 0) ? 22 : 23;
+    if (phase === 'Octavos') return (matchday % 2 === 0) ? 25 : 27;
+    if (phase === 'Cuartos') return (matchday % 2 === 0) ? 30 : 32;
+    if (phase === 'Semis') return (matchday % 2 === 0) ? 34 : 36;
+    if (phase === 'Final') return 39;
+    return 22;
+  }, [phase, matchday]);
+
+  const isUclWaitingForRepescados = phase !== 'Dieciseisavos' && !isClGroupsFinished;
+  const isChronologicallyReady = currentWeek >= expectedWeekForPhase;
+  const canPlayUELMatch = Boolean(isEuropaDate && isChronologicallyReady && !isUclWaitingForRepescados);
 
   const safeBracket = useMemo(() => {
-    return sanitizeChampionsBracket(uelComp?.bracket, uelComp?.teams) || { Dieciseisavos: [], Octavos: [], Cuartos: [], Semis: [], Final: [] };
-  }, [uelComp?.bracket, uelComp?.teams]);
+    return sanitizeChampionsBracket(safeUelComp?.bracket, safeUelComp?.teams) || { Dieciseisavos: [], Octavos: [], Cuartos: [], Semis: [], Final: [] };
+  }, [safeUelComp?.bracket, safeUelComp?.teams]);
+
+  const isFinalPlayed = Boolean(safeBracket?.Final?.[0]?.sh !== null && safeBracket?.Final?.[0]?.sh !== undefined);
+  const isFinished = Boolean(safeUelComp?.showWinner || phase === 'Terminado' || isFinalPlayed);
 
   // Base táctica y opciones
   const baseTactic = useMemo(() => ({
@@ -133,8 +159,8 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
         const h = uelComp.history[i];
         const m = (h.results || []).find((r: any) => r && (r.hId === userUelId || r.aId === userUelId));
         if (m) {
-          const ht = uelComp.teams.find((t: any) => t.id === m.hId) || { name: 'Local' };
-          const at = uelComp.teams.find((t: any) => t.id === m.aId) || { name: 'Visitante' };
+          const ht = safeUelComp.teams.find((t: any) => t.id === m.hId) || { name: 'Local' };
+          const at = safeUelComp.teams.find((t: any) => t.id === m.aId) || { name: 'Visitante' };
           const isHome = m.hId === userUelId;
           const myScore = isHome ? m.sh : m.sa;
           const rivalScore = isHome ? m.sa : m.sh;
@@ -229,16 +255,16 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
       const isVuelta = matchday % 2 !== 0 && phase !== 'Final';
       const homeId = isVuelta ? match.aId : match.hId;
       const awayId = isVuelta ? match.hId : match.aId;
-      const homeTeam = uelComp.teams.find((t: any) => t.id === homeId) || { name: 'Por Definir', att: 3, opp: 3, def: 3 };
-      const awayTeam = uelComp.teams.find((t: any) => t.id === awayId) || { name: 'Por Definir', att: 3, opp: 3, def: 3 };
+      const homeTeam = safeUelComp.teams.find((t: any) => t.id === homeId) || { name: 'Por Definir', att: 3, opp: 3, def: 3 };
+      const awayTeam = safeUelComp.teams.find((t: any) => t.id === awayId) || { name: 'Por Definir', att: 3, opp: 3, def: 3 };
       const isHome = homeId === careerUelTeam.id;
       const rival = isHome ? awayTeam : homeTeam;
 
       let aggregate = null;
       if (isVuelta && match.sh !== null && match.sa !== null) {
         aggregate = {
-          idaHomeName: uelComp.teams.find((t: any) => t.id === match.hId)?.name,
-          idaAwayName: uelComp.teams.find((t: any) => t.id === match.aId)?.name,
+          idaHomeName: safeUelComp.teams.find((t: any) => t.id === match.hId)?.name,
+          idaAwayName: safeUelComp.teams.find((t: any) => t.id === match.aId)?.name,
           sh: match.sh,
           sa: match.sa,
           myIdaScore: isHome ? match.sa : match.sh,
@@ -263,7 +289,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
     }
 
     return null;
-  }, [isFinished, isNotQualified, careerUelTeam, phase, safeBracket, matchday, uelComp]);
+  }, [isFinished, isNotQualified, careerUelTeam, phase, safeBracket, matchday, safeUelComp]);
 
   // Comprobar si el usuario fue eliminado o se consagró campeón
   const winnerTeam = useMemo(() => {
@@ -271,8 +297,8 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
     const final = safeBracket?.Final?.[0] || safeBracket?.Final;
     if (!final || final.sh === null || final.sh === undefined) return null;
     const winId = final.sh > final.sa ? final.hId : final.sa > final.sh ? final.aId : ((final.penH || 0) > (final.penA || 0) ? final.hId : final.aId);
-    return uelComp?.teams?.find((t: any) => t.id === winId) || null;
-  }, [isFinished, safeBracket, uelComp]);
+    return safeUelComp?.teams?.find((t: any) => t.id === winId) || null;
+  }, [isFinished, safeBracket, safeUelComp]);
 
   const isUserChampion = winnerTeam && careerUelTeam && winnerTeam.id === careerUelTeam.id;
   const isUserEliminated = !isNotQualified && careerUelTeam && !nextMatchInfo && !isUserChampion && (phase !== 'Dieciseisavos' || matchday > 0);
@@ -444,14 +470,14 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                 </div>
                 <h3 className='text-sm font-black uppercase italic text-white'>No clasificado a la Europa League</h3>
                 <p className='text-[10px] text-slate-300 leading-relaxed max-w-xs mx-auto'>
-                  Tu club no alcanzó las posiciones 5.º a 8.º de liga europea ni la repesca de Champions League en la temporada regular. Puedes seguir el cuadro del torneo y simular las eliminatorias.
+                  Tu club no alcanzó las posiciones europeas en la temporada regular. Puedes consultar el cuadro de eliminatorias, el cual progresa sincronizado semana a semana junto con las ligas y la Champions League.
                 </p>
-                {onSimulateAllUel && !isFinished && (
+                {onBackToCareer && (
                   <button
-                    onClick={onSimulateAllUel}
-                    className='w-full py-3 bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all active:scale-95'
+                    onClick={onBackToCareer}
+                    className='w-full py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 rounded-xl text-[9px] font-black uppercase italic tracking-wider transition-all border border-white/10'
                   >
-                    ⚡ Simular Todo el Torneo
+                    Volver a la Liga Nacional
                   </button>
                 )}
               </div>
@@ -482,14 +508,14 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                 <XCircle size={32} className='text-red-400 mx-auto' />
                 <h3 className='text-xs font-black uppercase italic text-white'>Eliminado de la Europa League</h3>
                 <p className='text-[9px] text-slate-300'>
-                  Tu club ha caído eliminado de la competición. Puedes seguir la fase eliminatoria o simular los cruces restantes.
+                  Tu club ha caído eliminado de la competición. Puedes seguir la fase eliminatoria que avanza sincronizada semana a semana según el calendario oficial europeo.
                 </p>
-                {onSimulateAllUel && !isFinished && (
+                {onBackToCareer && (
                   <button
-                    onClick={onSimulateAllUel}
-                    className='w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-[9px] font-black uppercase italic tracking-wider transition-all'
+                    onClick={onBackToCareer}
+                    className='w-full py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-200 rounded-xl text-[9px] font-black uppercase italic tracking-wider transition-all border border-white/10'
                   >
-                    Simular resto de la Europa League
+                    Volver a la Liga Nacional
                   </button>
                 )}
               </div>
@@ -556,19 +582,48 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                   </div>
                 </div>
 
-                {/* Panel Informativo cuando no es fecha de Europa League */}
-                {!isEuropaDate ? (
+                {/* Panel Informativo cuando no es fecha habilitada de Europa League */}
+                {!canPlayUELMatch ? (
                   <div className='space-y-3 pt-1'>
-                    <div className='p-3.5 bg-gradient-to-r from-amber-950/50 via-slate-900/80 to-amber-950/40 border border-amber-500/30 rounded-2xl space-y-2 text-left'>
-                      <div className='flex items-center gap-2'>
-                        <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30'>
-                          Modo Informativo · Semana Oficial {nextUelWeek || 20}
-                        </span>
+                    {isUclWaitingForRepescados ? (
+                      <div className='p-3.5 bg-gradient-to-r from-amber-950/50 via-slate-900/80 to-amber-950/40 border border-amber-500/30 rounded-2xl space-y-2 text-left'>
+                        <div className='flex items-center gap-2'>
+                          <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30'>
+                            Esperando Cierre de Grupos UCL (Semana 18)
+                          </span>
+                        </div>
+                        <p className='text-[10px] font-medium text-slate-300 leading-relaxed'>
+                          Los 8 repescados desde la Champions League (3.ºs de grupo) se confirmarán tras la Jornada 6 (Semana 18). Los Octavos de Final de Europa League se disputarán a la par con la Champions League en la <strong>Semana 25</strong> (Ida) y <strong>Semana 27</strong> (Vuelta).
+                        </p>
                       </div>
-                      <p className='text-[10px] font-medium text-slate-300 leading-relaxed'>
-                        Tu eliminatoria de Europa League se disputará en la <strong>Semana {nextUelWeek || 20}</strong> del calendario oficial (Semana actual: <strong>{currentWeek}</strong>).
-                      </p>
-                    </div>
+                    ) : !isChronologicallyReady ? (
+                      <div className='p-3.5 bg-gradient-to-r from-amber-950/50 via-slate-900/80 to-amber-950/40 border border-amber-500/30 rounded-2xl space-y-2 text-left'>
+                        <div className='flex items-center gap-2'>
+                          <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30'>
+                            Modo Informativo · Semana Oficial {expectedWeekForPhase}
+                          </span>
+                          {phase === 'Octavos' && (
+                            <span className='text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30'>
+                              A la par con UCL
+                            </span>
+                          )}
+                        </div>
+                        <p className='text-[10px] font-medium text-slate-300 leading-relaxed'>
+                          Tu eliminatoria de {uelPhaseLabel(phase)} se disputará en la <strong>Semana {expectedWeekForPhase}</strong> del calendario oficial{phase === 'Octavos' ? ' (a la par con los Octavos de UEFA Champions League)' : ''} (Semana actual: <strong>{currentWeek}</strong>).
+                        </p>
+                      </div>
+                    ) : (
+                      <div className='p-3.5 bg-gradient-to-r from-amber-950/50 via-slate-900/80 to-amber-950/40 border border-amber-500/30 rounded-2xl space-y-2 text-left'>
+                        <div className='flex items-center gap-2'>
+                          <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-white/10'>
+                            Compromiso Semanal Completado
+                          </span>
+                        </div>
+                        <p className='text-[10px] font-medium text-slate-300 leading-relaxed'>
+                          Ya has disputado el partido de Europa League de esta semana. Avanza en el calendario liguero para disputar la siguiente fecha continental.
+                        </p>
+                      </div>
+                    )}
 
                     <div className='grid grid-cols-2 gap-2'>
                       <button
@@ -787,9 +842,9 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                   <div className='grid gap-2'>
                     {matches.map((m: any, idx: number) => {
                       if (!m) return null;
-                      const h = uelComp?.teams?.find((t: any) => t.id === m.hId) || (m.hId ? { name: `Equipo ${m.hId}` } : null);
-                      const a = uelComp?.teams?.find((t: any) => t.id === m.aId) || (m.aId ? { name: `Equipo ${m.aId}` } : null);
-                      const isUserMatch = careerUelTeam && (m.hId === careerUelTeam.id || m.aId === careerUelTeam.id);
+                      const h = safeUelComp?.teams?.find((t: any) => t.id === m.hId) || (m.hId ? { name: `Equipo ${m.hId}` } : null);
+                      const a = safeUelComp?.teams?.find((t: any) => t.id === m.aId) || (m.aId ? { name: `Equipo ${m.aId}` } : null);
+                      const isUserMatch = Boolean(careerUelTeam?.id && (m.hId === careerUelTeam.id || m.aId === careerUelTeam.id));
 
                       const hasIda = m.sh !== null && m.sh !== undefined && m.sa !== null && m.sa !== undefined;
                       const hasVuelta = isTwoLegged && m.sh2 !== null && m.sh2 !== undefined && m.sa2 !== null && m.sa2 !== undefined;
@@ -1031,8 +1086,8 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                   </span>
                   <div className='space-y-1.5'>
                     {(hist.results || []).map((r: any, rIdx: number) => {
-                      const h = uelComp.teams.find((t: any) => t.id === r.hId) || { name: 'Local' };
-                      const a = uelComp.teams.find((t: any) => t.id === r.aId) || { name: 'Visitante' };
+                      const h = safeUelComp.teams.find((t: any) => t.id === r.hId) || { name: 'Local' };
+                      const a = safeUelComp.teams.find((t: any) => t.id === r.aId) || { name: 'Visitante' };
                       const isUser = careerUelTeam && (r.hId === careerUelTeam.id || r.aId === careerUelTeam.id);
                       return (
                         <div
@@ -1080,7 +1135,7 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
               </div>
 
               <div className='grid grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar'>
-                {(uelComp?.teams || []).map((t: any) => {
+                {(safeUelComp?.teams || []).map((t: any) => {
                   const isUser = careerUelTeam && t.id === careerUelTeam.id;
                   return (
                     <div

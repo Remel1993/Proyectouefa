@@ -504,9 +504,42 @@ export const CareerView = ({
   const isUelMatchWeek = isEuropaLeagueMatchWeek(careerCurrentWeek);
   const uelFinished = uelComp?.phase === 'Terminado' || !!uelComp?.showWinner || !!uelInfo?.champion;
   const isUelAlive = isUelQualified && !uelInfo?.notQualified && !!uelInfo?.alive && !uelInfo?.eliminated && !uelFinished;
-  // Solo es fecha activa para jugar/simular UEL si el club está clasificado, con vida, el torneo no finalizó y es semana oficial de partido
-  const isEuropaDate = !uelFinished && isUelAlive && (isUelMatchWeek || (allLeaguesFinished && careerCurrentWeek <= 39));
-  const nextUelWeek = getNextEuropaLeagueMatchWeek(careerCurrentWeek) || getNextEuropaLeagueWeek(careerCurrentWeek);
+
+  // Verificación cronológica de Champions League y Europa League
+  const isClGroupsFinished = Boolean(!clComp || clComp.phase !== 'groups' || (clComp.matchday || 0) >= 6);
+  const uelPhase = uelComp?.phase || 'Dieciseisavos';
+  const uelMd = uelComp?.matchday || 0;
+
+  // Semana esperada para la ronda actual de UEL
+  const expectedUelWeekForCurrentRound = uelPhase === 'Dieciseisavos'
+    ? (uelMd % 2 === 0 ? 22 : 23)
+    : uelPhase === 'Octavos'
+      ? (uelMd % 2 === 0 ? 25 : 27)
+      : uelPhase === 'Cuartos'
+        ? (uelMd % 2 === 0 ? 30 : 32)
+        : uelPhase === 'Semis'
+          ? (uelMd % 2 === 0 ? 34 : 36)
+          : uelPhase === 'Final'
+            ? 39
+            : 22;
+
+  // Para Dieciseisavos (semanas 22-23); para Octavos en adelante (semanas 25+ a la par con Champions), Champions League DEBE haber completado grupos
+  const isRoundChronologicallyEligible = uelPhase === 'Dieciseisavos'
+    ? (careerCurrentWeek >= 22)
+    : (isClGroupsFinished && careerCurrentWeek >= expectedUelWeekForCurrentRound);
+
+  const expUelMd = getExpectedCupMatchdayForWeek('C3', careerCurrentWeek) ?? 99;
+  const isUelPendingThisWeek = (uelMd < expUelMd);
+
+  // Solo es fecha activa para jugar/simular UEL si el club está clasificado, con vida, el torneo no finalizó,
+  // la ronda es cronológicamente válida y es semana oficial de partido con partido pendiente
+  const isEuropaDate = !uelFinished && isUelAlive && isRoundChronologicallyEligible && (
+    (allLeaguesFinished && (uelPhase === 'Dieciseisavos' || isClGroupsFinished)) ||
+    (isUelMatchWeek && isUelPendingThisWeek)
+  );
+  const nextUelWeek = expectedUelWeekForCurrentRound > careerCurrentWeek 
+    ? expectedUelWeekForCurrentRound 
+    : (getNextEuropaLeagueMatchWeek(careerCurrentWeek) || getNextEuropaLeagueWeek(careerCurrentWeek));
 
   // Verificación precisa de partidos pendientes por disputar en la semana en curso
   const currentWeekCalendar = useMemo(() => getSemanaCalendario(careerCurrentWeek), [careerCurrentWeek]);
@@ -518,8 +551,7 @@ export const CareerView = ({
   const expClMd = getExpectedCupMatchdayForWeek('C1', careerCurrentWeek) ?? 99;
   const isClPending = hasChampionsThisWeek && isClAlive && ((clComp?.matchday || 0) < expClMd);
 
-  const expUelMd = getExpectedCupMatchdayForWeek('C3', careerCurrentWeek) ?? 99;
-  const isUelPending = hasEuropaThisWeek && isUelAlive && ((uelComp?.matchday || 0) < expUelMd);
+  const isUelPending = hasEuropaThisWeek && isUelAlive && isRoundChronologicallyEligible && isUelPendingThisWeek;
 
   const expLeagueMd = getLeagueMatchdayForWeek(careerCurrentWeek);
   const careerLeagueMd = (career.div === 2 ? comp?.matchday2 : comp?.matchday) || 0;
@@ -1088,17 +1120,6 @@ export const CareerView = ({
         </div>
 
         <div className='flex items-center gap-1.5 shrink-0'>
-          {onSetupVillarrealScenario && (
-            <button
-              onClick={onSetupVillarrealScenario}
-              className='h-11 px-3 rounded-2xl bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-400 text-[9px] font-black uppercase tracking-wider gap-1 shadow-lg active:scale-95 transition-all'
-              title='Recargar Escenario Hipotético: Villarreal CF en 5º puesto al final de temporada'
-            >
-              <Zap size={14} />
-              <span className='hidden sm:inline'>Villarreal 5º</span>
-            </button>
-          )}
-
           {/* Acceso directo a Historial de Leyenda en cabecera */}
           <button
             onClick={() => setShowLegendModal(true)}
@@ -1511,9 +1532,9 @@ export const CareerView = ({
                             {!isChampionsDate ? <Lock size={15} className='text-amber-400' /> : <Swords size={16} className='text-amber-300' />}
                             <span>{isChampionsDate ? 'Jugar UCL (Dados)' : `Bloqueado (Semana ${nextClWeek || 7})`}</span>
                           </button>
-                          {(onSimulateChampionsMatch || onSimulateAllChampions) && (
+                          {onSimulateChampionsMatch && (
                             <button
-                              onClick={isChampionsDate ? (onSimulateChampionsMatch || onSimulateAllChampions) : undefined}
+                              onClick={isChampionsDate ? onSimulateChampionsMatch : undefined}
                               disabled={!isChampionsDate}
                               className={`w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border ${
                                 isChampionsDate
@@ -1522,7 +1543,7 @@ export const CareerView = ({
                               }`}
                             >
                               {!isChampionsDate ? <Lock size={15} className='text-amber-400' /> : <Dices size={16} className='text-blue-200' />}
-                              <span>{isChampionsDate ? 'Simular UCL' : `Bloqueado (${nextClWeek || 7})`}</span>
+                              <span>{isChampionsDate ? 'Simular UCL (Jornada)' : `Bloqueado (${nextClWeek || 7})`}</span>
                             </button>
                           )}
                         </div>
@@ -1576,13 +1597,13 @@ export const CareerView = ({
                                 <Swords size={16} className='text-amber-300' />
                                 <span>Jugar UEL (Dados)</span>
                               </button>
-                              {(onSimulateUelMatch || onSimulateAllUel) && (
+                              {onSimulateUelMatch && (
                                 <button
-                                  onClick={onSimulateUelMatch || onSimulateAllUel}
+                                  onClick={onSimulateUelMatch}
                                   className='w-full py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 border bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/30 active:scale-95 shadow-md cursor-pointer'
                                 >
                                   <Dices size={16} className='text-amber-400' />
-                                  <span>Simular Europa League</span>
+                                  <span>Simular UEL (Jornada)</span>
                                 </button>
                               )}
                             </div>
@@ -1956,29 +1977,7 @@ export const CareerView = ({
                     </Panel>
                   )}
                 </div>
-              ) : totalPendingMatchesThisWeek === 0 && careerCurrentWeek < 42 && (!allLeaguesFinished || !championsFinished) ? (
-                <Panel className='p-5 border-emerald-500/30 bg-gradient-to-br from-slate-900/90 via-emerald-950/30 to-slate-900/90 text-center space-y-4'>
-                  <div className='w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-md'>
-                    <CheckCircle size={24} />
-                  </div>
-                  <div>
-                    <h3 className='text-sm font-black uppercase italic tracking-wider text-white'>
-                      Jornada de la Semana {careerCurrentWeek} Finalizada
-                    </h3>
-                    <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
-                      Has completado todos tus partidos oficiales asignados para esta fecha. Simula el resto de resultados o avanza al siguiente bloque del calendario.
-                    </p>
-                  </div>
-                  <div className='pt-1'>
-                    <button
-                      onClick={onSimulateMatch}
-                      className='w-full bg-gradient-to-r from-emerald-500 via-teal-600 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-4 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 font-black cursor-pointer'
-                    >
-                      <FastForward size={15} /> Avanzar a Semana {careerCurrentWeek + 1}
-                    </button>
-                  </div>
-                </Panel>
-              ) : (careerCurrentWeek >= 42 || (allLeaguesFinished && championsFinished)) ? (
+              ) : (careerCurrentWeek >= 42 || (allLeaguesFinished && championsFinished) || (divisionFinished && championsFinished) || (divisionFinished && (!isClQualified || clInfo?.eliminated) && (!isUelQualified || uelInfo?.eliminated || uelFinished))) ? (
                 <Panel className='p-5 border-amber-500/30 bg-gradient-to-br from-slate-900/90 via-slate-900/60 to-amber-950/30 text-center space-y-4'>
                   <div className='w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center mx-auto'>
                     <Trophy size={24} />
@@ -1989,8 +1988,8 @@ export const CareerView = ({
                     </h3>
                     <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
                       {contractSigned || reviewDone
-                        ? `Has completado el calendario oficial de 42 semanas y tu contrato ha quedado regularizado para la Temporada ${(seasonState?.season || 1) + 1}.`
-                        : 'Has completado el calendario oficial de 42 semanas. Revisa la evaluación directiva, evalúa los objetivos cumplidos y tramita tu renovación o nuevo club.'}
+                        ? `Has completado el calendario oficial de la temporada y tu contrato ha quedado regularizado para la Temporada ${(seasonState?.season || 1) + 1}.`
+                        : 'Has completado el calendario oficial de la temporada. Revisa la evaluación directiva, evalúa los objetivos cumplidos y tramita tu renovación o nuevo club.'}
                     </p>
                   </div>
                   <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
@@ -2018,22 +2017,71 @@ export const CareerView = ({
                       Temporada Liguera Concluida
                     </h3>
                     <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
-                      Has completado todas las jornadas de tu campeonato doméstico. Puedes simular el resto de ligas y copas europeas para avanzar al balance final y contratos de la siguiente temporada.
+                      Has completado todas las jornadas de tu campeonato doméstico. Puedes resolver tus compromisos europeos o iniciar directamente la siguiente temporada.
+                    </p>
+                  </div>
+                  <div className='space-y-2 pt-1'>
+                    {onNewSeason && (
+                      <button
+                        onClick={onNewSeason}
+                        className='w-full bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 font-black cursor-pointer'
+                      >
+                        <RotateCcw size={15} /> Iniciar Temporada {(seasonState?.season || 1) + 1}
+                      </button>
+                    )}
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                      {onOpenChampions && isClQualified && !championsFinished ? (
+                        <button
+                          onClick={onOpenChampions}
+                          className='bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                        >
+                          <Trophy size={14} /> Jugar Champions
+                        </button>
+                      ) : onOpenUel && isUelQualified && !uelFinished ? (
+                        <button
+                          onClick={onOpenUel}
+                          className='bg-amber-600 hover:bg-amber-500 text-white py-3 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                        >
+                          <Flame size={14} /> Jugar Europa League
+                        </button>
+                      ) : null}
+                      <button
+                        onClick={onOpenReview}
+                        className='bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white py-3 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-md active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
+                      >
+                        <Award size={14} /> Balance de Temporada
+                      </button>
+                    </div>
+                  </div>
+                </Panel>
+              ) : totalPendingMatchesThisWeek === 0 && careerCurrentWeek < 42 ? (
+                <Panel className='p-5 border-emerald-500/30 bg-gradient-to-br from-slate-900/90 via-emerald-950/30 to-slate-900/90 text-center space-y-4'>
+                  <div className='w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-md'>
+                    <CheckCircle size={24} />
+                  </div>
+                  <div>
+                    <h3 className='text-sm font-black uppercase italic tracking-wider text-white'>
+                      Jornada de la Semana {careerCurrentWeek} Finalizada
+                    </h3>
+                    <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
+                      Has completado todos tus partidos oficiales asignados para esta fecha. Simula el resto de resultados o avanza al siguiente bloque del calendario.
                     </p>
                   </div>
                   <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
                     <button
                       onClick={onSimulateMatch}
-                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30 cursor-pointer'
+                      className='bg-gradient-to-r from-emerald-500 via-teal-600 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 font-black cursor-pointer'
                     >
-                      <FastForward size={15} /> Simular Semana {careerCurrentWeek}
+                      <FastForward size={15} /> Avanzar a Semana {careerCurrentWeek + 1}
                     </button>
-                    <button
-                      onClick={onOpenReview}
-                      className='bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
-                    >
-                      <Award size={15} /> Balance de Temporada
-                    </button>
+                    {onNewSeason && (
+                      <button
+                        onClick={onNewSeason}
+                        className='bg-slate-800 hover:bg-slate-700 text-amber-300 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-amber-500/30 cursor-pointer'
+                      >
+                        <RotateCcw size={15} /> Cerrar e Iniciar Temporada {(seasonState?.season || 1) + 1}
+                      </button>
+                    )}
                   </div>
                 </Panel>
               ) : (
@@ -2861,6 +2909,7 @@ export const CareerView = ({
               team={team}
               uelComp={uelComp}
               uelInfo={uelInfo}
+              clComp={clComp}
               onPlayUelMatch={onPlayUelMatch || onOpenUel}
               onSimulateUelMatch={onSimulateUelMatch}
               onSimulateAllUel={onSimulateAllUel}
@@ -3456,7 +3505,6 @@ export const CareerView = ({
           if (onOpenChampions) onOpenChampions();
           setTab('cl');
         }}
-        onSimulateChampions={onSimulateAllChampions}
         onNewSeason={onNewSeason}
         isClQualified={isClQualified}
         championsFinished={championsFinished}

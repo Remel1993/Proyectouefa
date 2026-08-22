@@ -8,7 +8,6 @@ interface EndSeasonModalProps {
   onGoToInbox: () => void;
   onOpenReview: () => void;
   onOpenChampions?: () => void;
-  onSimulateChampions?: () => void;
   onNewSeason?: () => void;
   isClQualified?: boolean;
   championsFinished?: boolean;
@@ -31,7 +30,6 @@ export const EndSeasonModal: React.FC<EndSeasonModalProps> = ({
   onGoToInbox,
   onOpenReview,
   onOpenChampions,
-  onSimulateChampions,
   onNewSeason,
   isClQualified = false,
   championsFinished,
@@ -178,22 +176,8 @@ export const EndSeasonModal: React.FC<EndSeasonModalProps> = ({
             </button>
           )}
 
-          {/* Botón para simular la Champions League directamente desde el modal de fin de temporada */}
-          {onSimulateChampions && !championsFinished && (
-            <button
-              onClick={() => {
-                onClose();
-                onSimulateChampions();
-              }}
-              className="w-full bg-blue-700 hover:bg-blue-600 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-2 border border-blue-400/30 shadow-md"
-            >
-              <Trophy size={16} className="text-amber-300" />
-              Simular Champions League <ArrowRight size={14} />
-            </button>
-          )}
-
-          {/* Si ya terminaron las ligas y la Champions, botón directo para empezar otra temporada */}
-          {allLeaguesFinished && championsFinished && onNewSeason && (
+          {/* Botón directo para empezar otra temporada */}
+          {onNewSeason && (
             <button
               onClick={() => {
                 onClose();
@@ -201,7 +185,7 @@ export const EndSeasonModal: React.FC<EndSeasonModalProps> = ({
               }}
               className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2"
             >
-              <RotateCcw size={15} /> Iniciar Nueva Temporada Global
+              <RotateCcw size={15} /> Iniciar Nueva Temporada
             </button>
           )}
 

@@ -61,12 +61,14 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
 
   const phase = clComp?.phase || 'groups';
   const matchday = clComp?.matchday || 0;
-  const isFinished = clComp?.showWinner || phase === 'Terminado';
 
   // Bracket seguro y auto-reparado con formato oficial UEFA (ida y vuelta en Octavos/Cuartos/Semis, partido único en Final)
   const safeBracket = useMemo(() => {
     return sanitizeChampionsBracket(clComp?.bracket, clComp?.teams) || clComp?.bracket;
   }, [clComp?.bracket, clComp?.teams]);
+
+  const isFinalPlayed = Boolean(safeBracket?.Final?.[0]?.sh !== null && safeBracket?.Final?.[0]?.sh !== undefined);
+  const isFinished = Boolean(clComp?.showWinner || phase === 'Terminado' || isFinalPlayed);
 
   // Base táctica y opciones
   const baseTactic = useMemo(() => ({
@@ -1309,7 +1311,7 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                       {(Array.isArray(safeBracket[p]) ? safeBracket[p] : [safeBracket[p]]).filter(Boolean).map((m: any, mi: number) => {
                         const h = clComp.teams.find((t: any) => t.id === m.hId);
                         const a = clComp.teams.find((t: any) => t.id === m.aId);
-                        const isMyMatch = m.hId === careerClTeam?.id || m.aId === careerClTeam?.id;
+                        const isMyMatch = Boolean(careerClTeam?.id && (m.hId === careerClTeam.id || m.aId === careerClTeam.id));
 
                         let winner = null;
                         let isFinished = false;
