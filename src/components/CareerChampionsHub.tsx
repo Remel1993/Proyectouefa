@@ -1280,36 +1280,32 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                     <Trophy size={11} className='text-amber-400' /> Cuadro de Eliminatorias UEFA Champions League
                   </span>
                   <span className='flex items-center gap-1 text-slate-400 bg-slate-900/60 px-2 py-0.5 rounded-full border border-white/10'>
-                    <span>{bracketRoundFilter === 'ALL' ? '← Desliza lateral y verticalmente →' : 'Vista de Ronda'}</span>
+                    <span>{bracketRoundFilter === 'ALL' ? 'Todas las Rondas' : 'Filtro Activo'}</span>
                   </span>
                 </div>
 
-                <div className={`${
-                  bracketRoundFilter === 'ALL'
-                    ? 'flex gap-4 overflow-x-auto pb-6 custom-scrollbar scroll-smooth -mx-1 px-1 touch-auto'
-                    : 'grid grid-cols-1 md:grid-cols-2 gap-4'
-                }`}>
+                <div className='space-y-4'>
                 {['Octavos', 'Cuartos', 'Semis', 'Final']
                   .filter(p => safeBracket[p] && (bracketRoundFilter === 'ALL' || bracketRoundFilter === p))
                   .map(p => (
-                  <div key={p} className={`${bracketRoundFilter === 'ALL' ? 'min-w-[280px] sm:min-w-[310px] flex-shrink-0' : 'w-full'} space-y-2.5`}>
-                    <div className='flex items-center justify-between bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 px-3.5 py-2 rounded-2xl border border-blue-500/30 shadow-md'>
+                  <div key={p} className='space-y-2.5'>
+                    <div className='flex items-center justify-between bg-gradient-to-r from-blue-950 via-slate-900 to-blue-950 px-4 py-2.5 rounded-2xl border border-blue-500/30 shadow-md'>
                       <div>
-                        <h4 className='text-[11px] font-black uppercase italic text-blue-300'>{clPhaseLabel(p)}</h4>
+                        <h4 className='text-xs font-black uppercase italic text-blue-300'>{clPhaseLabel(p)}</h4>
                         <span className='text-[8px] font-bold text-slate-400'>{p === 'Final' ? 'Partido Único (Sede Neutral)' : 'Eliminatoria Ida y Vuelta'}</span>
                       </div>
                       {p !== 'Final' ? (
-                        <div className='flex items-center gap-2 text-[7.5px] font-black uppercase tracking-wider text-slate-400'>
-                          <span className='w-6 text-center text-slate-300'>Ida</span>
-                          <span className='w-6 text-center text-slate-300'>Vta</span>
-                          <span className='w-8 text-center text-amber-300'>Glob</span>
+                        <div className='flex items-center gap-2 text-[8px] font-black uppercase tracking-wider text-slate-400'>
+                          <span className='w-7 text-center text-slate-300'>Ida</span>
+                          <span className='w-7 text-center text-slate-300'>Vta</span>
+                          <span className='w-9 text-center text-amber-300'>Glob</span>
                         </div>
                       ) : (
-                        <span className='text-[8px] font-black uppercase text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30'>Final</span>
+                        <span className='text-[8px] font-black uppercase text-amber-400 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30'>Final</span>
                       )}
                     </div>
 
-                    <div className='space-y-2.5'>
+                    <div className='grid grid-cols-1 gap-2.5'>
                       {(Array.isArray(safeBracket[p]) ? safeBracket[p] : [safeBracket[p]]).filter(Boolean).map((m: any, mi: number) => {
                         const h = clComp.teams.find((t: any) => t.id === m.hId);
                         const a = clComp.teams.find((t: any) => t.id === m.aId);
@@ -1395,21 +1391,21 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                               {isTwoLegged ? (
                                 <div className='flex items-center gap-2 tabular-nums text-[10px] shrink-0'>
                                   {/* Ida */}
-                                  <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
+                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
                                     hasIda ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
                                   }`} title='Goles en Ida'>
                                     {hasIda ? m.sh : '—'}
                                   </span>
 
                                   {/* Vuelta */}
-                                  <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
+                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
                                     hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
                                   }`} title='Goles en Vuelta'>
                                     {hasVuelta ? m.sh2 : '—'}
                                   </span>
 
                                   {/* Global */}
-                                  <span className={`w-8 text-center py-0.5 rounded-lg font-black shadow-sm ${
+                                  <span className={`w-9 text-center py-0.5 rounded-lg font-black shadow-sm ${
                                     hasVuelta
                                       ? (winner?.id === h?.id ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black' : 'bg-blue-900/60 text-blue-200 border border-blue-500/30')
                                       : 'text-slate-600'
@@ -1462,21 +1458,21 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                               {isTwoLegged ? (
                                 <div className='flex items-center gap-2 tabular-nums text-[10px] shrink-0'>
                                   {/* Ida */}
-                                  <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
+                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
                                     hasIda ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
                                   }`} title='Goles en Ida'>
                                     {hasIda ? m.sa : '—'}
                                   </span>
 
                                   {/* Vuelta */}
-                                  <span className={`w-6 text-center py-0.5 rounded font-extrabold ${
+                                  <span className={`w-7 text-center py-0.5 rounded font-extrabold ${
                                     hasVuelta ? 'bg-black/50 text-slate-200 border border-white/5' : 'text-slate-600'
                                   }`} title='Goles en Vuelta'>
                                     {hasVuelta ? m.sa2 : '—'}
                                   </span>
 
                                   {/* Global */}
-                                  <span className={`w-8 text-center py-0.5 rounded-lg font-black shadow-sm ${
+                                  <span className={`w-9 text-center py-0.5 rounded-lg font-black shadow-sm ${
                                     hasVuelta
                                       ? (winner?.id === a?.id ? 'bg-gradient-to-r from-amber-500 to-yellow-400 text-slate-950 font-black' : 'bg-blue-900/60 text-blue-200 border border-blue-500/30')
                                       : 'text-slate-600'

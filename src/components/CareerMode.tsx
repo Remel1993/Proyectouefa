@@ -14,11 +14,13 @@ import {
   isSquadMaxed, careerSpells, CONTRACT_SEASONS, CL_SPOTS, getClSpots, signingRepBonus,
   generateRumors, getRejectionReason, getMarketVacancies, SPECIAL_OFFICE_WEEKS,
   getSpecialOfficeWeeks, calculateCurrentSeasonWeek, getContractObjectivesForTeam,
-  calculateBoardConfidence, clPhaseLabel, getChampionsScheduledWeeks
+  calculateBoardConfidence, clPhaseLabel, uelPhaseLabel, getChampionsScheduledWeeks
 } from '../lib/career';
 import {
   isChampionsWeek, isEuropaLeagueWeek, getNextChampionsWeek, getNextEuropaLeagueWeek,
-  isChampionsDrawWeek, isChampionsMatchWeek
+  isChampionsDrawWeek, isChampionsMatchWeek, isEuropaLeagueDrawWeek, isEuropaLeagueMatchWeek,
+  getNextEuropaLeagueMatchWeek, getExpectedCupMatchdayForWeek, getLeagueMatchdayForWeek,
+  getSemanaCalendario
 } from '../lib/seasonCalendar';
 import { TrainingModal } from './TrainingModal';
 import { TrainingDrillModal } from './TrainingDrillModal';
@@ -153,7 +155,7 @@ const buildNews = ({
 };
 
 /* ============================ SELECCIÓN DE CLUB ============================ */
-export const CareerSelectView = ({ candidates, leagueName, onBack, onStart, pastCareers = [], onDeletePastCareer, ui }) => {
+export const CareerSelectView = ({ candidates, leagueName, onBack, onStart, onSetupVillarrealScenario, pastCareers = [], onDeletePastCareer, ui }) => {
   const { Shield } = ui;
   const [teamId, setTeamId] = useState(candidates?.[0]?.id ?? null);
   const [manager, setManager] = useState('');
@@ -184,15 +186,28 @@ export const CareerSelectView = ({ candidates, leagueName, onBack, onStart, past
           </div>
         </div>
 
-        {pastCareers && pastCareers.length > 0 && (
-          <button
-            onClick={() => setShowArchiveModal(true)}
-            className='bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-2xl px-3 py-2 text-[9px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5 active:scale-95 transition-all shadow-md'
-          >
-            <Trophy size={14} className='text-amber-400' />
-            Historial ({pastCareers.length})
-          </button>
-        )}
+        <div className='flex items-center gap-2'>
+          {onSetupVillarrealScenario && (
+            <button
+              onClick={onSetupVillarrealScenario}
+              className='bg-yellow-500/20 hover:bg-yellow-500/30 border border-yellow-500/40 rounded-2xl px-3 py-2 text-[9px] font-black uppercase tracking-wider text-yellow-300 flex items-center gap-1.5 active:scale-95 transition-all shadow-md'
+              title='Cargar Escenario Hipotético: Villarreal CF en 5º puesto al final de temporada'
+            >
+              <Zap size={14} className='text-yellow-400' />
+              Villarreal 5º (Final Temp.)
+            </button>
+          )}
+
+          {pastCareers && pastCareers.length > 0 && (
+            <button
+              onClick={() => setShowArchiveModal(true)}
+              className='bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded-2xl px-3 py-2 text-[9px] font-black uppercase tracking-wider text-amber-300 flex items-center gap-1.5 active:scale-95 transition-all shadow-md'
+            >
+              <Trophy size={14} className='text-amber-400' />
+              Historial ({pastCareers.length})
+            </button>
+          )}
+        </div>
       </div>
 
       <Panel className='p-5 mb-5'>
@@ -216,7 +231,7 @@ export const CareerSelectView = ({ candidates, leagueName, onBack, onStart, past
       </div>
 
       <div className='space-y-3'>
-        {(candidates || []).map(t => (
+        {(candidates || []).filter(Boolean).map(t => (
           <button
             key={t.id}
             onClick={() => setTeamId(t.id)}
@@ -228,7 +243,7 @@ export const CareerSelectView = ({ candidates, leagueName, onBack, onStart, past
             <div className='flex-grow'>
               <p className='text-xs font-black uppercase italic text-white drop-shadow-md'>{t.name}</p>
               <p className='text-[8px] font-bold text-slate-200 uppercase bg-black/40 px-1.5 py-0.5 rounded inline-block mt-1'>
-                {t.att}/{t.opp}/{t.def} · Fuerza {strengthOf(t)}
+                {(t.att ?? 3)}/{(t.opp ?? 3)}/{(t.def ?? 3)} · Fuerza {strengthOf(t)}
               </p>
             </div>
             {t.id === teamId && <div className='bg-white/30 p-1.5 rounded-full'><Check size={14} className='text-white' /></div>}
@@ -370,7 +385,7 @@ export const CareerView = ({
   onAdvanceOfficeWeek, onDecideLaterAppOffer, onRejectAppResolution, onDismissAppResolutionModal,
   onDismissSimulationFeedback, allComps, schedule, clComp, onPlayChampionsMatch,
   onSimulateChampionsMatch, onSimulateAllChampions, onDrawChampions, onPerformKnockoutDraw,
-  onDeleteCareer, onArchiveAndResetCareer,
+  onDeleteCareer, onArchiveAndResetCareer, onSetupVillarrealScenario,
   pastCareers = [], onDeletePastCareer, tab: externalTab, onTabChange: onExternalTabChange, ui
 }) => {
   const { Shield, FormBadges, DieIcon } = ui;
@@ -417,9 +432,9 @@ export const CareerView = ({
   }, [career.tactic, base, activeInjury]);
 
   const maxLeagueStrength = useMemo(() => {
-    const allSquads = standings?.length ? standings : (comp?.teams || []);
+    const allSquads = (standings?.length ? standings : (comp?.teams || [])).filter(Boolean);
     if (!allSquads.length) return 14;
-    return Math.max(...allSquads.map(t => (t.att || 0) + (t.opp || 0) + (t.def || 0)), 14);
+    return Math.max(...allSquads.map(t => ((t?.att || 0) + (t?.opp || 0) + (t?.def || 0))), 14);
   }, [standings, comp]);
 
   const options = useMemo(() => tacticalOptions(base, tier), [base, tier]);
@@ -495,8 +510,33 @@ export const CareerView = ({
   const isClMatchWeek = isChampionsMatchWeek(careerCurrentWeek);
   const isChampionsDate = isClDrawWeek || isClMatchWeek || allLeaguesFinished || championsFinished || clComp?.phase === 'Terminado' || clComp?.showWinner;
   const nextClWeek = getNextChampionsWeek(careerCurrentWeek);
-  const isEuropaDate = isEuropaLeagueWeek(careerCurrentWeek) || allLeaguesFinished || uelComp?.phase === 'Terminado' || uelComp?.showWinner;
-  const nextUelWeek = getNextEuropaLeagueWeek(careerCurrentWeek);
+
+  const isUelDrawWeek = isEuropaLeagueDrawWeek(careerCurrentWeek);
+  const isUelMatchWeek = isEuropaLeagueMatchWeek(careerCurrentWeek);
+  const uelFinished = uelComp?.phase === 'Terminado' || !!uelComp?.showWinner || !!uelInfo?.champion;
+  const isUelAlive = isUelQualified && !uelInfo?.notQualified && !!uelInfo?.alive && !uelInfo?.eliminated && !uelFinished;
+  // Solo es fecha activa para jugar/simular UEL si el club está clasificado, con vida, el torneo no finalizó y es semana oficial de partido
+  const isEuropaDate = !uelFinished && isUelAlive && (isUelMatchWeek || (allLeaguesFinished && careerCurrentWeek <= 39));
+  const nextUelWeek = getNextEuropaLeagueMatchWeek(careerCurrentWeek) || getNextEuropaLeagueWeek(careerCurrentWeek);
+
+  // Verificación precisa de partidos pendientes por disputar en la semana en curso
+  const currentWeekCalendar = useMemo(() => getSemanaCalendario(careerCurrentWeek), [careerCurrentWeek]);
+  const hasChampionsThisWeek = Boolean(currentWeekCalendar?.fixtures?.some(f => f.competicion === 'CHAMPIONS' && f.esPartido));
+  const hasEuropaThisWeek = Boolean(currentWeekCalendar?.fixtures?.some(f => f.competicion === 'EUROPA_LEAGUE' && f.esPartido));
+  const hasLeagueThisWeek = Boolean(currentWeekCalendar?.fixtures?.some(f => f.competicion === 'LIGA' && f.esPartido) || !currentWeekCalendar);
+
+  const isClAlive = isClQualified && !clInfo?.notQualified && !!clInfo?.alive && !clInfo?.eliminated && !clComp?.showWinner && clComp?.phase !== 'Terminado' && !clInfo?.champion;
+  const expClMd = getExpectedCupMatchdayForWeek('C1', careerCurrentWeek) ?? 99;
+  const isClPending = hasChampionsThisWeek && isClAlive && ((clComp?.matchday || 0) < expClMd);
+
+  const expUelMd = getExpectedCupMatchdayForWeek('C3', careerCurrentWeek) ?? 99;
+  const isUelPending = hasEuropaThisWeek && isUelAlive && ((uelComp?.matchday || 0) < expUelMd);
+
+  const expLeagueMd = getLeagueMatchdayForWeek(careerCurrentWeek);
+  const careerLeagueMd = (career.div === 2 ? comp?.matchday2 : comp?.matchday) || 0;
+  const isLeaguePending = hasLeagueThisWeek && !divisionFinished && Boolean(nextFixture) && !currentWeekInfo.isOfficeWeek && (careerLeagueMd < (expLeagueMd ?? (careerLeagueMd + 1)));
+
+  const totalPendingMatchesThisWeek = (isClPending ? 1 : 0) + (isUelPending ? 1 : 0) + (isLeaguePending ? 1 : 0);
 
   // Generador de rumores dinámicos de mercado
   const dynamicRumors = useMemo(() => generateRumors(allComps || {}, career), [allComps, career]);
@@ -1058,14 +1098,27 @@ export const CareerView = ({
           )}
         </div>
 
-        {/* Acceso directo a Historial de Leyenda en cabecera */}
-        <button
-          onClick={() => setShowLegendModal(true)}
-          className='w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500/30 to-yellow-400/20 border border-amber-500/40 flex items-center justify-center text-yellow-400 shrink-0 shadow-lg active:scale-95 transition-all'
-          title='Ver Perfil e Historial de Leyenda'
-        >
-          <Trophy size={20} />
-        </button>
+        <div className='flex items-center gap-1.5 shrink-0'>
+          {onSetupVillarrealScenario && (
+            <button
+              onClick={onSetupVillarrealScenario}
+              className='h-11 px-3 rounded-2xl bg-yellow-500/20 border border-yellow-500/40 flex items-center justify-center text-yellow-400 text-[9px] font-black uppercase tracking-wider gap-1 shadow-lg active:scale-95 transition-all'
+              title='Recargar Escenario Hipotético: Villarreal CF en 5º puesto al final de temporada'
+            >
+              <Zap size={14} />
+              <span className='hidden sm:inline'>Villarreal 5º</span>
+            </button>
+          )}
+
+          {/* Acceso directo a Historial de Leyenda en cabecera */}
+          <button
+            onClick={() => setShowLegendModal(true)}
+            className='w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500/30 to-yellow-400/20 border border-amber-500/40 flex items-center justify-center text-yellow-400 shrink-0 shadow-lg active:scale-95 transition-all'
+            title='Ver Perfil e Historial de Leyenda'
+          >
+            <Trophy size={20} />
+          </button>
+        </div>
       </header>
 
       {/* TICKER DINÁMICO DE RUMORES DE MERCADO (1 SOLA LÍNEA HORIZONTAL) */}
@@ -1509,7 +1562,15 @@ export const CareerView = ({
                     {/* Botones de UEFA Europa League sólo si el club entró en Europa League */}
                     {isUelQualified && (
                       <div className='pt-1'>
-                        {isEuropaDate ? (
+                        {uelFinished ? (
+                          <button
+                            onClick={() => setTab('uel')}
+                            className='w-full bg-slate-800 hover:bg-slate-700 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all shadow-md flex items-center justify-center gap-2 border border-amber-500/20'
+                          >
+                            <Flame size={16} className='text-amber-400' />
+                            <span>Ver Hub de Europa League (Finalizada)</span>
+                          </button>
+                        ) : isEuropaDate ? (
                           <div className='space-y-1.5'>
                             <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
                               <button
@@ -1553,7 +1614,7 @@ export const CareerView = ({
                               <span>UEFA Europa League</span>
                             </div>
                             <span className='text-[8.5px] font-bold text-amber-300/90 uppercase bg-amber-500/20 px-2 py-0.5 rounded-md'>
-                              Próx. Sem. {nextUelWeek || 20} · Ver Cuadro
+                              {!uelInfo?.alive ? 'Eliminado · Ver Hub' : `Próx. Sem. ${nextUelWeek || 20} · Ver Cuadro`}
                             </span>
                           </button>
                         )}
@@ -1672,202 +1733,259 @@ export const CareerView = ({
                   </button>
                 </Panel>
 
-              ) : nextFixture ? (
-                <Panel className='p-5'>
-                  <div className='flex items-center justify-between mb-2'>
-                    <p className='text-[9px] font-black uppercase tracking-widest text-emerald-400'>
-                      Próximo partido · Jornada {(career.div === 2 ? (comp?.matchday2 || 0) : (comp?.matchday || 0)) + 1} de {totalRoundsCount}
-                    </p>
-                    <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10'>
-                      Semana {currentWeekInfo.week} de {currentWeekInfo.totalWeeks || (totalRoundsCount + 5)}
-                    </span>
-                  </div>
-                  <div className='flex items-center justify-between mt-4'>
-                    <div className='flex-1 text-center'>
-                      <div className='relative inline-block'>
-                        <Shield color1={team?.color1} color2={team?.color2} initial={team?.name} size='md' isFlag={team?.isFlag} />
-                        {position > 0 && (
-                          <span className='absolute -bottom-1 -right-1 bg-slate-950/90 text-amber-400 border border-amber-400/40 text-[7.5px] font-black px-1.5 py-0.2 rounded-full shadow-md'>
-                            {position}º
-                          </span>
-                        )}
-                      </div>
-                      <p className='text-[9px] font-black uppercase italic mt-2 text-white truncate'>{team?.name}</p>
-                      <p className='text-[8px] font-black uppercase text-amber-400 mt-0.5'>{isHome ? 'Local' : 'Visitante'}</p>
-                    </div>
-                    <div className='px-3 text-center'>
-                      <p className='text-[8px] font-black uppercase text-slate-400'>{isHome ? 'En casa' : 'Fuera'}</p>
-                      <p className='text-2xl font-black italic text-white'>VS</p>
-                    </div>
-                    <div className='flex-1 text-center'>
-                      <div className='relative inline-block'>
-                        <Shield color1={rival?.color1} color2={rival?.color2} initial={rival?.name} size='md' isFlag={rival?.isFlag} />
-                        {(() => {
-                          const rivalPos = (standings || []).findIndex((t: any) => t.id === rival?.id) + 1;
-                          return rivalPos > 0 ? (
-                            <span className='absolute -bottom-1 -right-1 bg-slate-950/90 text-slate-300 border border-white/20 text-[7.5px] font-black px-1.5 py-0.2 rounded-full shadow-md'>
-                              {rivalPos}º
-                            </span>
-                          ) : null;
-                        })()}
-                      </div>
-                      <p className='text-[9px] font-black uppercase italic mt-2 text-white truncate'>{rival?.name}</p>
-                      <p className='text-[8px] font-black uppercase text-slate-400 mt-0.5'>{isHome ? 'Visitante' : 'Local'}</p>
-                    </div>
-                  </div>
-                  <div className='mt-4 bg-black/30 rounded-2xl px-4 py-3 border border-white/5 flex items-center justify-between'>
-                    <div>
-                      <p className='text-[8px] font-black uppercase tracking-widest text-slate-400'>Rival</p>
-                      <p className='text-[10px] font-bold text-slate-200'>{rival?.att}/{rival?.opp}/{rival?.def} · Fuerza {strengthOf(rival)}</p>
-                    </div>
-                    <div className='text-right'>
-                      <p className='text-[8px] font-black uppercase tracking-widest text-slate-400'>Tu salida</p>
-                      <p className={`text-[10px] font-bold ${activeInjury ? 'text-rose-300' : 'text-amber-300'}`}>
-                        {effectiveTactic.att}/{effectiveTactic.opp}/{effectiveTactic.def}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Aviso de baja temporal por lesión si aplica */}
-                  {activeInjury && (
-                    <div className='mt-3 bg-red-950/50 border border-red-500/40 rounded-2xl p-3.5 flex items-start gap-2.5 shadow-md'>
-                      <AlertTriangle size={16} className='text-red-400 shrink-0 mt-0.5' />
-                      <div className='text-[9px] font-bold text-red-200 leading-snug'>
-                        <span className='text-white font-black uppercase block tracking-wider'>
-                          Baja temporal por lesión: -1 {activeInjury.label}
+              ) : totalPendingMatchesThisWeek > 0 ? (
+                <div className='space-y-4'>
+                  {/* COMPROMISO EUROPEO: UEFA CHAMPIONS LEAGUE (si está pendiente esta semana) */}
+                  {isClPending && (
+                    <Panel className='p-5 border-blue-500/40 bg-gradient-to-br from-slate-900/95 via-blue-950/50 to-indigo-950/40 shadow-xl space-y-4'>
+                      <div className='flex items-center justify-between'>
+                        <p className='text-[9px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-1.5'>
+                          <Trophy size={14} className='text-amber-400' /> UEFA Champions League · {clInfo?.phaseLabel || 'Fase Continental'}
+                        </p>
+                        <span className='text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full bg-blue-900/60 text-blue-200 border border-blue-400/40'>
+                          Semana {careerCurrentWeek} de 42
                         </span>
-                        Esta reducción es válida <strong>exclusivamente para este partido</strong>. La plantilla recibirá el alta médica completa de forma automática al término del encuentro.
                       </div>
-                    </div>
+
+                      <div className='bg-black/40 rounded-2xl p-4 border border-blue-500/20 text-center space-y-2'>
+                        <div className='flex items-center justify-between px-2'>
+                          <div className='flex-1 text-center'>
+                            <Shield color1={team?.color1} color2={team?.color2} initial={team?.name} size='md' isFlag={team?.isFlag} />
+                            <p className='text-[9px] font-black uppercase italic mt-1.5 text-white truncate'>{team?.name}</p>
+                          </div>
+                          <div className='px-3 text-center'>
+                            <p className='text-[8px] font-black uppercase text-blue-300'>Compromiso Europeo</p>
+                            <p className='text-xl font-black italic text-white'>VS</p>
+                          </div>
+                          <div className='flex-1 text-center'>
+                            <Shield color1='#1e3a8a' color2='#3b82f6' initial={clInfo?.rivalName || 'R'} size='md' />
+                            <p className='text-[9px] font-black uppercase italic mt-1.5 text-blue-200 truncate'>{clInfo?.rivalName || 'Rival Europeo'}</p>
+                          </div>
+                        </div>
+                        <p className='text-[8.5px] font-bold text-slate-300 pt-1 border-t border-white/5'>
+                          {clInfo?.groupName ? `Fase de Grupos · Grupo ${clInfo.groupName}` : `Eliminatoria Directa · ${clInfo?.phaseLabel}`}
+                        </p>
+                      </div>
+
+                      <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
+                        <button
+                          onClick={onPlayChampionsMatch}
+                          className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                        >
+                          <Swords size={14} /> Jugar UCL
+                        </button>
+                        <button
+                          onClick={onSimulateChampionsMatch}
+                          className='bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
+                        >
+                          <FastForward size={14} className='text-blue-400' /> Simular Partido
+                        </button>
+                        <button
+                          onClick={() => setTab('cl')}
+                          className='bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 hover:text-blue-100 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-500/30 cursor-pointer'
+                        >
+                          <Trophy size={14} /> Ver Hub UCL
+                        </button>
+                      </div>
+                    </Panel>
                   )}
 
-                  {/* Previa y atajo de entrenamiento */}
-                  <div className='mt-4 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-blue-500/10 rounded-2xl p-3.5 border border-white/10 flex items-center justify-between gap-2'>
-                    <div className='min-w-0'>
-                      <div className='flex items-center gap-1.5 flex-wrap'>
-                        <Dumbbell size={13} className='text-amber-400 shrink-0' />
-                        <p className='text-[9px] font-black uppercase tracking-widest text-amber-400 truncate'>
-                          Previa de Entrenamiento
+                  {/* COMPROMISO EUROPEO: UEFA EUROPA LEAGUE (si está pendiente esta semana) */}
+                  {isUelPending && (
+                    <Panel className='p-5 border-amber-500/40 bg-gradient-to-br from-slate-900/95 via-amber-950/50 to-orange-950/40 shadow-xl space-y-4'>
+                      <div className='flex items-center justify-between'>
+                        <p className='text-[9px] font-black uppercase tracking-widest text-amber-400 flex items-center gap-1.5'>
+                          <Flame size={14} className='text-amber-400' /> UEFA Europa League · {uelPhaseLabel(uelComp?.phase)}
                         </p>
-                        {career.medicalImmunityWeeks > 0 && (
-                          <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1'>
-                            <ShieldCheck size={10} /> Escudo: {career.medicalImmunityWeeks} sem.
-                          </span>
-                        )}
+                        <span className='text-[8px] font-black uppercase px-2.5 py-0.5 rounded-full bg-amber-900/60 text-amber-200 border border-amber-400/40'>
+                          Semana {careerCurrentWeek} de 42
+                        </span>
                       </div>
-                      <p className='text-[10px] font-bold text-slate-200 mt-0.5'>
-                        {hasTrainedThisMatchday ? 'Sesión de la jornada completada' : 'Entrena intensidad (1D6) o gestiona PE'}
-                      </p>
-                    </div>
-                    <div className='flex items-center gap-1.5 shrink-0'>
-                      <button
-                        onClick={() => setShowDrillModal(true)}
-                        disabled={hasTrainedThisMatchday}
-                        className='px-2.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[8px] font-black uppercase italic tracking-wider disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1 active:scale-95'
-                      >
-                        <Dices size={11} /> 1D6
-                      </button>
-                      <button
-                        onClick={() => setShowTrainingModal(true)}
-                        className='px-2.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[8px] font-black uppercase italic tracking-wider flex items-center gap-1 active:scale-95'
-                      >
-                        <Zap size={11} /> PE
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className='grid grid-cols-2 gap-2 mt-4'>
-                    <button
-                      onClick={onPlayMatch}
-                      className='bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
-                    >
-                      <Swords size={15} /> Jugar Partido
-                    </button>
+                      <div className='bg-black/40 rounded-2xl p-4 border border-amber-500/20 text-center space-y-2'>
+                        <div className='flex items-center justify-between px-2'>
+                          <div className='flex-1 text-center'>
+                            <Shield color1={team?.color1} color2={team?.color2} initial={team?.name} size='md' isFlag={team?.isFlag} />
+                            <p className='text-[9px] font-black uppercase italic mt-1.5 text-white truncate'>{team?.name}</p>
+                          </div>
+                          <div className='px-3 text-center'>
+                            <p className='text-[8px] font-black uppercase text-amber-300'>Europa League</p>
+                            <p className='text-xl font-black italic text-white'>VS</p>
+                          </div>
+                          <div className='flex-1 text-center'>
+                            <Shield color1='#d97706' color2='#ea580c' initial={uelInfo?.rivalName || 'R'} size='md' />
+                            <p className='text-[9px] font-black uppercase italic mt-1.5 text-amber-200 truncate'>{uelInfo?.rivalName || 'Rival Europeo'}</p>
+                          </div>
+                        </div>
+                        <p className='text-[8.5px] font-bold text-slate-300 pt-1 border-t border-white/5'>
+                          Eliminatoria Directa · {uelPhaseLabel(uelComp?.phase)}
+                        </p>
+                      </div>
+
+                      <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
+                        <button
+                          onClick={onPlayUelMatch || onOpenUel}
+                          className='bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                        >
+                          <Swords size={14} /> Jugar UEL
+                        </button>
+                        <button
+                          onClick={onSimulateUelMatch}
+                          className='bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
+                        >
+                          <FastForward size={14} className='text-amber-400' /> Simular Partido
+                        </button>
+                        <button
+                          onClick={() => setTab('uel')}
+                          className='bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 hover:text-amber-100 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-amber-500/30 cursor-pointer'
+                        >
+                          <Flame size={14} /> Ver Hub UEL
+                        </button>
+                      </div>
+                    </Panel>
+                  )}
+
+                  {/* PARTIDO DE LIGA REGULAR (si está pendiente esta semana) */}
+                  {isLeaguePending && (
+                    <Panel className='p-5'>
+                      <div className='flex items-center justify-between mb-2'>
+                        <p className='text-[9px] font-black uppercase tracking-widest text-emerald-400'>
+                          Próximo partido · Jornada {(career.div === 2 ? (comp?.matchday2 || 0) : (comp?.matchday || 0)) + 1} de {totalRoundsCount}
+                        </p>
+                        <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-white/10'>
+                          Semana {currentWeekInfo.week} de {currentWeekInfo.totalWeeks || (totalRoundsCount + 5)}
+                        </span>
+                      </div>
+                      <div className='flex items-center justify-between mt-4'>
+                        <div className='flex-1 text-center'>
+                          <div className='relative inline-block'>
+                            <Shield color1={team?.color1} color2={team?.color2} initial={team?.name} size='md' isFlag={team?.isFlag} />
+                            {position > 0 && (
+                              <span className='absolute -bottom-1 -right-1 bg-slate-950/90 text-amber-400 border border-amber-400/40 text-[7.5px] font-black px-1.5 py-0.2 rounded-full shadow-md'>
+                                {position}º
+                              </span>
+                            )}
+                          </div>
+                          <p className='text-[9px] font-black uppercase italic mt-2 text-white truncate'>{team?.name}</p>
+                          <p className='text-[8px] font-black uppercase text-amber-400 mt-0.5'>{isHome ? 'Local' : 'Visitante'}</p>
+                        </div>
+                        <div className='px-3 text-center'>
+                          <p className='text-[8px] font-black uppercase text-slate-400'>{isHome ? 'En casa' : 'Fuera'}</p>
+                          <p className='text-2xl font-black italic text-white'>VS</p>
+                        </div>
+                        <div className='flex-1 text-center'>
+                          <div className='relative inline-block'>
+                            <Shield color1={rival?.color1} color2={rival?.color2} initial={rival?.name} size='md' isFlag={rival?.isFlag} />
+                            {(() => {
+                              const rivalPos = (standings || []).findIndex((t: any) => t.id === rival?.id) + 1;
+                              return rivalPos > 0 ? (
+                                <span className='absolute -bottom-1 -right-1 bg-slate-950/90 text-slate-300 border border-white/20 text-[7.5px] font-black px-1.5 py-0.2 rounded-full shadow-md'>
+                                  {rivalPos}º
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
+                          <p className='text-[9px] font-black uppercase italic mt-2 text-white truncate'>{rival?.name}</p>
+                          <p className='text-[8px] font-black uppercase text-slate-400 mt-0.5'>{isHome ? 'Visitante' : 'Local'}</p>
+                        </div>
+                      </div>
+                      <div className='mt-4 bg-black/30 rounded-2xl px-4 py-3 border border-white/5 flex items-center justify-between'>
+                        <div>
+                          <p className='text-[8px] font-black uppercase tracking-widest text-slate-400'>Rival</p>
+                          <p className='text-[10px] font-bold text-slate-200'>{rival?.att}/{rival?.opp}/{rival?.def} · Fuerza {strengthOf(rival)}</p>
+                        </div>
+                        <div className='text-right'>
+                          <p className='text-[8px] font-black uppercase tracking-widest text-slate-400'>Tu salida</p>
+                          <p className={`text-[10px] font-bold ${activeInjury ? 'text-rose-300' : 'text-amber-300'}`}>
+                            {effectiveTactic.att}/{effectiveTactic.opp}/{effectiveTactic.def}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Aviso de baja temporal por lesión si aplica */}
+                      {activeInjury && (
+                        <div className='mt-3 bg-red-950/50 border border-red-500/40 rounded-2xl p-3.5 flex items-start gap-2.5 shadow-md'>
+                          <AlertTriangle size={16} className='text-red-400 shrink-0 mt-0.5' />
+                          <div className='text-[9px] font-bold text-red-200 leading-snug'>
+                            <span className='text-white font-black uppercase block tracking-wider'>
+                              Baja temporal por lesión: -1 {activeInjury.label}
+                            </span>
+                            Esta reducción es válida <strong>exclusivamente para este partido</strong>. La plantilla recibirá el alta médica completa de forma automática al término del encuentro.
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Previa y atajo de entrenamiento */}
+                      <div className='mt-4 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-blue-500/10 rounded-2xl p-3.5 border border-white/10 flex items-center justify-between gap-2'>
+                        <div className='min-w-0'>
+                          <div className='flex items-center gap-1.5 flex-wrap'>
+                            <Dumbbell size={13} className='text-amber-400 shrink-0' />
+                            <p className='text-[9px] font-black uppercase tracking-widest text-amber-400 truncate'>
+                              Previa de Entrenamiento
+                            </p>
+                            {career.medicalImmunityWeeks > 0 && (
+                              <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1'>
+                                <ShieldCheck size={10} /> Escudo: {career.medicalImmunityWeeks} sem.
+                              </span>
+                            )}
+                          </div>
+                          <p className='text-[10px] font-bold text-slate-200 mt-0.5'>
+                            {hasTrainedThisMatchday ? 'Sesión de la jornada completada' : 'Entrena intensidad (1D6) o gestiona PE'}
+                          </p>
+                        </div>
+                        <div className='flex items-center gap-1.5 shrink-0'>
+                          <button
+                            onClick={() => setShowDrillModal(true)}
+                            disabled={hasTrainedThisMatchday}
+                            className='px-2.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-[8px] font-black uppercase italic tracking-wider disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1 active:scale-95'
+                          >
+                            <Dices size={11} /> 1D6
+                          </button>
+                          <button
+                            onClick={() => setShowTrainingModal(true)}
+                            className='px-2.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[8px] font-black uppercase italic tracking-wider flex items-center gap-1 active:scale-95'
+                          >
+                            <Zap size={11} /> PE
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className='grid grid-cols-2 gap-2 mt-4'>
+                        <button
+                          onClick={onPlayMatch}
+                          className='bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
+                        >
+                          <Swords size={15} /> Jugar Partido
+                        </button>
+                        <button
+                          onClick={onSimulateMatch}
+                          className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30 cursor-pointer'
+                        >
+                          <FastForward size={15} /> {totalPendingMatchesThisWeek > 1 ? 'Simular Partido' : 'Simular Semana'}
+                        </button>
+                      </div>
+                    </Panel>
+                  )}
+                </div>
+              ) : totalPendingMatchesThisWeek === 0 && careerCurrentWeek < 42 && (!allLeaguesFinished || !championsFinished) ? (
+                <Panel className='p-5 border-emerald-500/30 bg-gradient-to-br from-slate-900/90 via-emerald-950/30 to-slate-900/90 text-center space-y-4'>
+                  <div className='w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center mx-auto shadow-md'>
+                    <CheckCircle size={24} />
+                  </div>
+                  <div>
+                    <h3 className='text-sm font-black uppercase italic tracking-wider text-white'>
+                      Jornada de la Semana {careerCurrentWeek} Finalizada
+                    </h3>
+                    <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
+                      Has completado todos tus partidos oficiales asignados para esta fecha. Simula el resto de resultados o avanza al siguiente bloque del calendario.
+                    </p>
+                  </div>
+                  <div className='pt-1'>
                     <button
                       onClick={onSimulateMatch}
-                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-400/30 cursor-pointer'
+                      className='w-full bg-gradient-to-r from-emerald-500 via-teal-600 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-4 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 font-black cursor-pointer'
                     >
-                      <FastForward size={15} /> Simular Semana
-                    </button>
-                  </div>
-                </Panel>
-              ) : isChampionsDate && isClQualified && clInfo?.alive && !clInfo?.champion ? (
-                <Panel className='p-5 border-blue-500/30 bg-gradient-to-br from-slate-900/90 via-blue-950/40 to-slate-900/90'>
-                  <div className='flex items-center justify-between mb-2'>
-                    <p className='text-[9px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-1.5'>
-                      <Trophy size={13} className='text-amber-400' /> UEFA Champions League · {clInfo?.phaseLabel || 'Fase Continental'}
-                    </p>
-                    <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-900/60 text-blue-200 border border-blue-400/30'>
-                      Semana {careerCurrentWeek} de 42
-                    </span>
-                  </div>
-                  <div className='mt-3 bg-black/40 rounded-2xl p-4 border border-blue-500/20 text-center space-y-2'>
-                    <p className='text-[9px] font-black uppercase tracking-wider text-slate-300'>Compromiso Europeo</p>
-                    <p className='text-base font-black italic text-white'>
-                      {team?.name} <span className='text-blue-400'>vs</span> {clInfo?.rivalName || 'Rival Europeo'}
-                    </p>
-                    <p className='text-[9px] font-bold text-slate-300'>
-                      {clInfo?.groupName ? `Grupo ${clInfo.groupName} · Jornada de Grupos` : `Eliminatoria Directa · ${clInfo?.phaseLabel}`}
-                    </p>
-                  </div>
-                  <div className='grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4'>
-                    <button
-                      onClick={onPlayChampionsMatch}
-                      className='bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer'
-                    >
-                      <Swords size={14} /> Jugar UCL
-                    </button>
-                    <button
-                      onClick={onSimulateChampionsMatch}
-                      className='bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
-                    >
-                      <Dices size={14} className='text-amber-400' /> Simular UCL
-                    </button>
-                    <button
-                      onClick={() => setTab('cl')}
-                      className='bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 hover:text-blue-100 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-blue-500/30 cursor-pointer'
-                    >
-                      <Trophy size={14} /> Ver Hub UCL
-                    </button>
-                  </div>
-                </Panel>
-              ) : isEuropaDate && isUelQualified && uelInfo?.alive && !uelInfo?.champion ? (
-                <Panel className='p-5 border-amber-500/30 bg-gradient-to-br from-slate-900/90 via-amber-950/30 to-slate-900/90'>
-                  <div className='flex items-center justify-between mb-2'>
-                    <p className='text-[9px] font-black uppercase tracking-widest text-amber-400 flex items-center gap-1.5'>
-                      <Flame size={13} className='text-amber-400' /> UEFA Europa League · {uelPhaseLabel(uelComp?.phase)}
-                    </p>
-                    <span className='text-[8px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-900/60 text-amber-200 border border-amber-400/30'>
-                      Semana {careerCurrentWeek} de 42
-                    </span>
-                  </div>
-                  <div className='mt-3 bg-black/40 rounded-2xl p-4 border border-amber-500/20 text-center space-y-2'>
-                    <p className='text-[9px] font-black uppercase tracking-wider text-slate-300'>Compromiso de Europa League</p>
-                    <p className='text-base font-black italic text-white'>
-                      {team?.name} <span className='text-amber-400'>vs</span> {uelInfo?.rivalName || 'Rival Europeo'}
-                    </p>
-                    <p className='text-[9px] font-bold text-slate-300'>
-                      Eliminatoria Directa · {uelPhaseLabel(uelComp?.phase)}
-                    </p>
-                  </div>
-                  <div className='grid grid-cols-1 sm:grid-cols-3 gap-2 mt-4'>
-                    <button
-                      onClick={onPlayUelMatch || onOpenUel}
-                      className='bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer font-black'
-                    >
-                      <Swords size={14} /> Jugar UEL
-                    </button>
-                    <button
-                      onClick={onSimulateUelMatch}
-                      className='bg-slate-800/80 hover:bg-slate-700 text-slate-200 hover:text-white py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-white/10 cursor-pointer'
-                    >
-                      <Dices size={14} className='text-amber-400' /> Simular UEL
-                    </button>
-                    <button
-                      onClick={() => setTab('uel')}
-                      className='bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 hover:text-amber-100 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-amber-500/30 cursor-pointer'
-                    >
-                      <Flame size={14} /> Ver Hub UEL
+                      <FastForward size={15} /> Avanzar a Semana {careerCurrentWeek + 1}
                     </button>
                   </div>
                 </Panel>
@@ -3734,7 +3852,7 @@ export const CareerMatchView = ({ matchState, rolling, onRoll, onFinish, ui }) =
             {matchState.phase === 'penalties' && PenaltyDots && <PenaltyDots history={matchState.penalties?.historyH} />}
             <Shield color1={matchState.home?.color1} color2={matchState.home?.color2} initial={matchState.home?.name} size='lg' isFlag={matchState.home?.isFlag} />
             <p className='text-[10px] font-black uppercase italic mt-2 truncate text-white drop-shadow-md w-full'>{matchState.home?.name}</p>
-            <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{matchState.home.att + '/' + matchState.home.opp + '/' + matchState.home.def}</p>
+            <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{(matchState.home?.att ?? 3) + '/' + (matchState.home?.opp ?? 3) + '/' + (matchState.home?.def ?? 3)}</p>
           </div>
 
           <div className='px-4 flex flex-col items-center shrink-0 min-w-[140px]'>
@@ -3764,7 +3882,7 @@ export const CareerMatchView = ({ matchState, rolling, onRoll, onFinish, ui }) =
             {matchState.phase === 'penalties' && PenaltyDots && <PenaltyDots history={matchState.penalties?.historyA} />}
             <Shield color1={matchState.away?.color1} color2={matchState.away?.color2} initial={matchState.away?.name} size='lg' isFlag={matchState.away?.isFlag} />
             <p className='text-[10px] font-black uppercase italic mt-2 truncate text-white drop-shadow-md w-full'>{matchState.away?.name}</p>
-            <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{matchState.away.att + '/' + matchState.away.opp + '/' + matchState.away.def}</p>
+            <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{(matchState.away?.att ?? 3) + '/' + (matchState.away?.opp ?? 3) + '/' + (matchState.away?.def ?? 3)}</p>
           </div>
         </div>
       </div>

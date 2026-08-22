@@ -43,9 +43,9 @@ export const HubView = ({
   const globalMatchday = seasonState?.globalMatchday || 1;
   const currentWeek = seasonState?.currentWeek || 1;
   const weekData = useMemo(() => getSemanaCalendario(currentWeek) || SEASON_CALENDAR_42_WEEKS[0], [currentWeek]);
-  const isChampionsDate = isChampionsWeek(currentWeek) || allLeaguesFinished || comps['C1']?.showWinner || comps['C1']?.phase === 'Terminado';
+  const isChampionsDate = isChampionsMatchWeek(currentWeek) || (allLeaguesFinished && currentWeek <= 41 && !comps['C1']?.showWinner && comps['C1']?.phase !== 'Terminado');
   const nextClWeek = getNextChampionsWeek(currentWeek);
-  const isEuropaDate = isEuropaLeagueWeek(currentWeek) || allLeaguesFinished || comps['C3']?.showWinner || comps['C3']?.phase === 'Terminado';
+  const isEuropaDate = isEuropaLeagueMatchWeek(currentWeek) || (allLeaguesFinished && currentWeek <= 39 && !comps['C3']?.showWinner && comps['C3']?.phase !== 'Terminado');
   const nextUelWeek = getNextEuropaLeagueWeek(currentWeek);
   const pending = pendingLeagueIds || [];
   const leagues = [
