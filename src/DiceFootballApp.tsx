@@ -1248,6 +1248,215 @@ function DiceFootballApp() {
     else setView('careerSelect');
   };
 
+  const setupVillarrealScenario = () => {
+    // Buscar Villarreal CF en L1 o presets
+    const l1Comp = comps['L1'];
+    let vTeam = (l1Comp?.teams || []).find(t => t.name === 'Villarreal CF' || t.name?.toLowerCase().includes('villarreal'));
+    if (!vTeam) {
+      vTeam = {
+        id: 5,
+        name: 'Villarreal CF',
+        att: 5,
+        opp: 4,
+        def: 4,
+        color1: '#facc15',
+        color2: '#1e3a8a',
+        p: 38,
+        w: 19,
+        d: 9,
+        l: 10,
+        gf: 65,
+        ga: 44,
+        pts: 66
+      };
+    }
+
+    const totalMatchdays = 38;
+
+    // Actualizar todas las ligas para que estén completas
+    setComps(prev => {
+      const next = { ...prev };
+
+      // 1. Configurar L1 (La Liga Española) con Villarreal en 5º puesto
+      const existingL1 = prev['L1'] || {};
+      const teamsL1 = existingL1.teams && existingL1.teams.length > 0 ? [...existingL1.teams] : [];
+
+      // Puntos y registros calibrados para ubicar a Villarreal exactamente en 5º lugar (puesto Europa League / Champions)
+      // 1. Real Madrid (88 pts)
+      // 2. FC Barcelona (85 pts)
+      // 3. Atlético Madrid (76 pts)
+      // 4. Athletic Club (70 pts)
+      // 5. Villarreal CF (66 pts) -> 5º PUESTO
+      // 6. Real Sociedad (63 pts)
+      // 7. Real Betis (59 pts)
+      // ... resto
+      const orderedNames = [
+        'Real Madrid',
+        'FC Barcelona',
+        'Atlético Madrid',
+        'Athletic Club',
+        'Villarreal CF',
+        'Real Sociedad',
+        'Real Betis',
+        'Girona FC',
+        'Celta Vigo',
+        'Valencia CF',
+        'Sevilla FC',
+        'Osasuna',
+        'Getafe',
+        'Mallorca',
+        'Rayo Vallecano',
+        'Elche CF',
+        'Alavés',
+        'Levante UD',
+        'Real Oviedo',
+        'Espanyol'
+      ];
+
+      const simulatedPts = [88, 85, 76, 70, 66, 63, 59, 54, 51, 48, 45, 43, 41, 39, 37, 35, 33, 30, 27, 24];
+      const simulatedGF =  [82, 80, 68, 62, 65, 54, 52, 48, 46, 44, 42, 38, 35, 34, 33, 31, 30, 28, 25, 22];
+      const simulatedGA =  [30, 34, 32, 36, 44, 38, 42, 45, 48, 49, 52, 50, 53, 55, 58, 60, 62, 65, 70, 75];
+
+      let updatedTeamsL1 = [];
+      if (teamsL1.length > 0) {
+        // Mapear los equipos existentes ajustando sus estadísticas para que el orden final sea el deseado
+        // Buscamos cada equipo por nombre o id
+        const assigned = new Set();
+        orderedNames.forEach((targetName, idx) => {
+          let found = teamsL1.find(t => !assigned.has(t.id) && (t.name === targetName || t.name.toLowerCase().includes(targetName.toLowerCase())));
+          if (!found) {
+            found = teamsL1.find(t => !assigned.has(t.id));
+          }
+          if (found) {
+            assigned.add(found.id);
+            const pts = simulatedPts[idx] || (60 - idx * 2);
+            const gf = simulatedGF[idx] || 40;
+            const ga = simulatedGA[idx] || 40;
+            const w = Math.floor(pts / 3);
+            const d = pts % 3;
+            const l = Math.max(0, totalMatchdays - w - d);
+            updatedTeamsL1.push({
+              ...found,
+              p: totalMatchdays,
+              w,
+              d,
+              l,
+              gf,
+              ga,
+              pts
+            });
+          }
+        });
+
+        // Asegurar que si quedó alguno afuera se agregue
+        teamsL1.forEach(t => {
+          if (!assigned.has(t.id)) {
+            updatedTeamsL1.push({
+              ...t,
+              p: totalMatchdays,
+              w: 5,
+              d: 5,
+              l: 28,
+              gf: 20,
+              ga: 70,
+              pts: 20
+            });
+          }
+        });
+      }
+
+      next['L1'] = {
+        ...existingL1,
+        teams: updatedTeamsL1.length > 0 ? updatedTeamsL1 : existingL1.teams,
+        matchday: totalMatchdays,
+        showWinner: true
+      };
+
+      // 2. Marcar el resto de ligas como terminadas para permitir el paso de temporada y clasificaciones
+      LEAGUE_IDS.forEach(cId => {
+        if (cId !== 'L1' && next[cId]) {
+          const compTeams = next[cId].teams || [];
+          const mdCount = compTeams.length > 0 ? (compTeams.length - 1) * 2 : 38;
+          next[cId] = {
+            ...next[cId],
+            matchday: mdCount,
+            showWinner: true,
+            teams: compTeams.map((t, idx) => ({
+              ...t,
+              p: mdCount,
+              w: Math.max(0, mdCount - 10 - idx),
+              d: 5,
+              l: idx + 5,
+              gf: Math.max(20, 70 - idx * 2),
+              ga: 30 + idx * 2,
+              pts: Math.max(15, 80 - idx * 3)
+            }))
+          };
+        }
+      });
+
+      return next;
+    });
+
+    // 3. Configurar el estado de carrera para Villarreal
+    const vId = vTeam.id;
+    setCareer({
+      ...DEFAULT_CAREER,
+      active: true,
+      manager: career.manager || 'Mánager Submarino',
+      compId: 'L1',
+      div: 1,
+      teamId: vId,
+      tier: 2,
+      pe: 5,
+      reputation: 35, // Buena reputación en Primera División
+      startedSeason: 1,
+      contractStart: 1,
+      contractSeasons: 2,
+      signedForSeason: 1,
+      lastProcessedSeason: 0,
+      medicalImmunityWeeks: 0,
+      trainedMatchday: -1,
+      stats: {
+        matches: 38,
+        wins: 19,
+        draws: 9,
+        losses: 10,
+        gf: 65,
+        ga: 44
+      },
+      baseDist: { att: vTeam.att || 5, opp: vTeam.opp || 4, def: vTeam.def || 4 },
+      tactic: { att: vTeam.att || 5, opp: vTeam.opp || 4, def: vTeam.def || 4 },
+      seasonHistory: [],
+      firstTeamId: vId,
+      firstTeamCompId: 'L1',
+      firstTeamDiv: 1,
+      originalTeamStats: {
+        teamId: vId,
+        compId: 'L1',
+        div: 1,
+        att: vTeam.att || 5,
+        opp: vTeam.opp || 4,
+        def: vTeam.def || 4
+      }
+    });
+
+    // 4. Configurar seasonState en la última semana de la temporada (Semana 40: fin de liga)
+    setSeasonState(s => ({
+      ...s,
+      season: s.season || 1,
+      currentWeek: 40,
+      phase: 'league'
+    }));
+
+    setView('career');
+  };
+
+  // Exponer a window para conveniencia o llamadas desde consola si se requiere
+  useEffect(() => {
+    (window as any).setupVillarrealScenario = setupVillarrealScenario;
+  }, [comps, career]);
+
   const startCareer = (teamId, manager) => {
     const team = (comps[CAREER_LEAGUE_ID]?.teams2 || []).find(t => t.id === teamId);
     if (!team) return;
@@ -2103,9 +2312,9 @@ function DiceFootballApp() {
       simulateCareerUelMatch();
       return;
     }
-    // Si el mánager tiene un partido de liga pendiente en esta semana, simular el partido de liga
+    // Si el mánager tiene un partido de liga pendiente en esta semana, simular el partido de liga y avanzar semana si no hay más compromisos
     if (userPendingLeague) {
-      simulateCareerMatchday(false);
+      simulateCareerMatchday(true);
       return;
     }
 
@@ -4797,9 +5006,9 @@ function DiceFootballApp() {
   const CompetitionView = () => {
     if (!activeComp) return null;
     const currentWeek = seasonState?.currentWeek || 1;
-    const isChampionsDate = isChampionsWeek(currentWeek) || allLeaguesFinished || comps['C1']?.showWinner || comps['C1']?.phase === 'Terminado';
+    const isChampionsDate = isChampionsMatchWeek(currentWeek) || (allLeaguesFinished && currentWeek <= 41);
     const nextClWeek = getNextChampionsWeek(currentWeek);
-    const isEuropaDate = isEuropaLeagueWeek(currentWeek) || allLeaguesFinished || comps['C3']?.showWinner || comps['C3']?.phase === 'Terminado';
+    const isEuropaDate = isEuropaLeagueMatchWeek(currentWeek) || (allLeaguesFinished && currentWeek <= 39);
     const nextUelWeek = getNextEuropaLeagueWeek(currentWeek);
     const hasStarted = activeComp.type === 'league' 
       ? (activeComp.matchday > 0 || activeComp.matchday2 > 0 || activeComp.history?.length > 0)
@@ -6783,7 +6992,7 @@ function DiceFootballApp() {
               {matchState.phase === 'penalties' && <PenaltyDots history={matchState.penalties?.historyH} />}
               <Shield color1={matchState.home?.color1} color2={matchState.home?.color2} initial={matchState.home?.name} size='lg' isFlag={matchState.home?.isFlag} />
               <p className='text-[10px] font-black uppercase italic mt-2 truncate text-white drop-shadow-md w-full'>{matchState.home?.name}</p>
-              <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{matchState.home.att + '/' + matchState.home.opp + '/' + matchState.home.def}</p>
+              <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{(matchState.home?.att ?? 3) + '/' + (matchState.home?.opp ?? 3) + '/' + (matchState.home?.def ?? 3)}</p>
             </div>
 
             <div className='px-4 flex flex-col items-center shrink-0 w-32'>
@@ -6805,7 +7014,7 @@ function DiceFootballApp() {
               {matchState.phase === 'penalties' && <PenaltyDots history={matchState.penalties?.historyA} />}
               <Shield color1={matchState.away?.color1} color2={matchState.away?.color2} initial={matchState.away?.name} size='lg' isFlag={matchState.away?.isFlag} />
               <p className='text-[10px] font-black uppercase italic mt-2 truncate text-white drop-shadow-md w-full'>{matchState.away?.name}</p>
-              <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{matchState.away.att + '/' + matchState.away.opp + '/' + matchState.away.def}</p>
+              <p className='text-[8px] font-bold text-slate-300 mt-1 bg-black/40 backdrop-blur-sm inline-block px-2 rounded'>{(matchState.away?.att ?? 3) + '/' + (matchState.away?.opp ?? 3) + '/' + (matchState.away?.def ?? 3)}</p>
             </div>
           </div>
         </div>
@@ -6953,6 +7162,7 @@ function DiceFootballApp() {
                 leagueName={comps[CAREER_LEAGUE_ID]?.name || 'Miscelánea'}
                 onBack={() => setView('hub')}
                 onStart={startCareer}
+                onSetupVillarrealScenario={setupVillarrealScenario}
                 pastCareers={pastCareers}
                 onDeletePastCareer={handleDeletePastCareer}
                 ui={careerUi}
@@ -7052,6 +7262,7 @@ function DiceFootballApp() {
                 onDismissSimulationFeedback={() => setCareer(c => ({ ...c, lastSimulationFeedback: null }))}
                 onDeleteCareer={handleDeleteCareerHard}
                 onArchiveAndResetCareer={handleArchiveAndResetCareer}
+                onSetupVillarrealScenario={setupVillarrealScenario}
                 pastCareers={pastCareers}
                 onDeletePastCareer={handleDeletePastCareer}
                 allComps={comps}
