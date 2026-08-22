@@ -468,17 +468,17 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   }
 
   // Inyectar los repescados en aId de Octavos.
-  // hId se completará con los ganadores de Dieciseisavos si ya se jugaron, o se mantendrá.
+  // hId se completará con los ganadores de Dieciseisavos si ya se jugaron, o se mantendrá con un ID válido.
   if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
-      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? m.hId) : m.hId,
+      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? m.hId ?? (i + 1)) : (m.hId ?? (i + 1)),
       aId: 17 + i
     }));
   } else {
     updatedBracket.Octavos = Array(8).fill(0).map((_, i) => ({
       id: 'O' + (i + 1),
-      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? null) : null,
+      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? (i + 1)) : (i + 1),
       aId: 17 + i,
       sh: null,
       sa: null,
