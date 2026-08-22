@@ -1,4 +1,8 @@
-import DiceFootballApp from "./DiceFootballApp";
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
 
-export default DiceFootballApp;
-
+export default function App() {
+  return <div></div>;
+}
