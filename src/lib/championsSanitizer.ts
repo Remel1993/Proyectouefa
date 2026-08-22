@@ -233,14 +233,31 @@ export const sanitizeChampionsBracket = (
  * Extrae con precisión los 8 terceros lugares de la Fase de Grupos de UEFA Champions League.
  */
 export const extractChampionsRepescados = (c1Comp: any): any[] => {
-  if (!c1Comp || !Array.isArray(c1Comp.groups) || !Array.isArray(c1Comp.teams)) {
+  if (!c1Comp || !Array.isArray(c1Comp.teams) || c1Comp.teams.length === 0) {
     return [];
+  }
+
+  // Si la fase de grupos de Champions League aún está activa (< 6 jornadas), los 8 repescados aún no están determinados
+  if (c1Comp.phase === 'groups' && (c1Comp.matchday || 0) < 6) {
+    return [];
+  }
+
+  let groups = c1Comp.groups;
+  if (!Array.isArray(groups) || groups.length === 0) {
+    if (c1Comp.teams.length >= 32) {
+      groups = Array.from({ length: 8 }, (_, i) => ({
+        name: `Grupo ${String.fromCharCode(65 + i)}`,
+        teamIds: c1Comp.teams.slice(i * 4, i * 4 + 4).map((t: any) => t.id)
+      }));
+    } else {
+      return [];
+    }
   }
 
   const repescados: any[] = [];
   const addedNames = new Set<string>();
 
-  c1Comp.groups.forEach((g: any, gi: number) => {
+  groups.forEach((g: any, gi: number) => {
     const groupTeams = c1Comp.teams
       .filter((t: any) => g.teamIds && g.teamIds.includes(t.id))
       .sort((a: any, b: any) => 
@@ -297,30 +314,35 @@ export const sanitizeEuropaLeagueTeams = (uelComp: any, c1Comp?: any): any => {
   const rawRepescados = rawTeams.filter((t: any) => t.isRepesca || t.id > 16);
   const cleanRepescados: any[] = [];
 
-  // Si c1Comp está disponible y ha finalizado grupos, intentar usar los terceros puestos reales
-  const c1Repescados = c1Comp ? extractChampionsRepescados(c1Comp) : [];
-  c1Repescados.forEach((r: any) => {
-    if (r && r.name && !usedNames.has(r.name) && cleanRepescados.length < 8) {
-      usedNames.add(r.name);
-      cleanRepescados.push({
-        ...r,
-        id: 17 + cleanRepescados.length,
-        isRepesca: true
-      });
-    }
-  });
+  // Si c1Comp está disponible y ha finalizado grupos, inyectar prioritariamente los terceros puestos reales
+  const isC1Done = !c1Comp || c1Comp.phase !== 'groups' || (c1Comp.matchday || 0) >= 6;
+  const c1Repescados = (c1Comp && isC1Done) ? extractChampionsRepescados(c1Comp) : [];
+  if (c1Repescados.length >= 8) {
+    c1Repescados.forEach((r: any) => {
+      if (r && r.name && !usedNames.has(r.name) && cleanRepescados.length < 8) {
+        usedNames.add(r.name);
+        cleanRepescados.push({
+          ...r,
+          id: 17 + cleanRepescados.length,
+          isRepesca: true
+        });
+      }
+    });
+  }
 
   // Conservar repescados previos que sean legítimos y no colisionen con los equipos de liga
-  rawRepescados.forEach((r: any) => {
-    if (r && r.name && !usedNames.has(r.name) && cleanRepescados.length < 8) {
-      usedNames.add(r.name);
-      cleanRepescados.push({
-        ...r,
-        id: 17 + cleanRepescados.length,
-        isRepesca: true
-      });
-    }
-  });
+  if (cleanRepescados.length < 8) {
+    rawRepescados.forEach((r: any) => {
+      if (r && r.name && !usedNames.has(r.name) && cleanRepescados.length < 8) {
+        usedNames.add(r.name);
+        cleanRepescados.push({
+          ...r,
+          id: 17 + cleanRepescados.length,
+          isRepesca: true
+        });
+      }
+    });
+  }
 
   // Si aún faltan repescados para completar los 8 (por haber eliminado duplicados), rellenar con clubes auténticos de PRESETS
   if (cleanRepescados.length < 8) {
@@ -370,13 +392,14 @@ export const sanitizeEuropaLeagueTeams = (uelComp: any, c1Comp?: any): any => {
 export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => {
   if (!uelComp || !uelComp.teams) return uelComp;
   
-  // Si la Europa League ya disputó Dieciseisavos y ya avanzó a Octavos, Cuartos, Semis o Final, no alterar la llave
+  // Si la Europa League ya disputó Dieciseisavos y ya avanzó a Octavos (con partidos jugados), no alterar la llave
   if (uelComp.phase && uelComp.phase !== 'Dieciseisavos' && (uelComp.matchday || 0) >= 2) {
     return sanitizeEuropaLeagueTeams(uelComp, c1Comp);
   }
 
   // Si Champions aún está en grupos y no ha completado las 6 jornadas, no sincronizar prematuramente
-  if (c1Comp?.phase === 'groups' && (c1Comp?.matchday || 0) < 6) {
+  const isC1Done = !c1Comp || c1Comp.phase !== 'groups' || (c1Comp.matchday || 0) >= 6;
+  if (!isC1Done) {
     return sanitizeEuropaLeagueTeams(uelComp, c1Comp);
   }
 
@@ -444,19 +467,19 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
     }
   }
 
-  // IMPORTANTE: Si Dieciseisavos aún NO se ha jugado completamente (vuelta),
-  // los cruces de Octavos deben figurar con hId: null y aId: null ("Por definir").
+  // Inyectar los repescados en aId de Octavos.
+  // hId se completará con los ganadores de Dieciseisavos si ya se jugaron, o se mantendrá.
   if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
-      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? m.hId) : null,
-      aId: isVueltaPlayed ? (17 + i) : null
+      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? m.hId) : m.hId,
+      aId: 17 + i
     }));
   } else {
     updatedBracket.Octavos = Array(8).fill(0).map((_, i) => ({
       id: 'O' + (i + 1),
       hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? null) : null,
-      aId: isVueltaPlayed ? (17 + i) : null,
+      aId: 17 + i,
       sh: null,
       sa: null,
       sh2: null,
