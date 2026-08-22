@@ -423,7 +423,7 @@ function DiceFootballApp() {
         else clWinnerId = ((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId;
         const clWinner = (cl.teams || []).find((t: any) => t.id === clWinnerId);
         if (clWinner) {
-          archiveCompetition('C1', 1, clWinner, cl);
+          archiveCompetition('C1', 1, clWinner, cl, true);
         }
       }
     }
@@ -439,7 +439,7 @@ function DiceFootballApp() {
         else uelWinnerId = ((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId;
         const uelWinner = (uel.teams || []).find((t: any) => t.id === uelWinnerId);
         if (uelWinner) {
-          archiveCompetition('C3', 1, uelWinner, uel);
+          archiveCompetition('C3', 1, uelWinner, uel, true);
         }
       }
     }
@@ -449,66 +449,89 @@ function DiceFootballApp() {
     let careerQualifiedCLName: string | null = null;
     let careerQualifiedUELName: string | null = null;
 
-    setComps(prev => {
-      const next = { ...prev };
-      
-      // 1. PRIMERO: Garantizar que TODAS las 8 ligas queden 100% terminadas en la temporada que finaliza
-      const finishedLeaguesState: any = { ...prev };
-      LEAGUE_IDS.forEach(id => {
-        let c = finishedLeaguesState[id];
-        if (!c) return;
-        if (!leagueSeasonOver(c)) {
-          const runDivToFinish = (teamsKey: string, mdKey: string, histKey: string, winKey: string, isDiv2?: boolean) => {
-            let guard = 0;
-            const total = divTotalRounds(c[teamsKey]);
-            while ((c[mdKey] || 0) < total && guard++ < 80) {
-              const res = simulateDivisionMatchday(c[teamsKey], c[mdKey] || 0, c[histKey] || [], id, isDiv2);
-              if (!res) break;
-              c = {
-                ...c,
-                [teamsKey]: res.updatedTeams,
-                [mdKey]: res.nextMatchday,
-                [histKey]: res.newHistory,
-                [winKey]: res.isFinished ? true : c[winKey]
-              };
-            }
-          };
-          runDivToFinish('teams', 'matchday', 'history', 'showWinner', false);
-          runDivToFinish('teams2', 'matchday2', 'history2', 'showWinner2', true);
-        }
-        
-        // Guardar la foto fija de la clasificación definitiva de esta temporada que acaba de terminar
-        const snap1 = buildStandingsSnapshot(c.teams);
-        const snap2 = buildStandingsSnapshot(c.teams2);
-        finishedLeaguesState[id] = {
-          ...c,
-          previousStandings: snap1,
-          previousStandings2: snap2,
-          isLeagueFinished: true
-        };
-      });
-
-      // 2. Determinar si el club del usuario en modo carrera clasificó a UCL o UEL en esta misma temporada finalizada
-      if (career.active && career.teamId && career.compId && finishedLeaguesState[career.compId]) {
-        const finishedComp = finishedLeaguesState[career.compId];
-        if (career.div === 1 && Array.isArray(finishedComp.teams)) {
-          const sortedD1 = [...finishedComp.teams].sort((a: any, b: any) => 
-            (b.pts || 0) - (a.pts || 0) || 
-            ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) || 
-            (b.gf || 0) - (a.gf || 0)
-          );
-          const pos = sortedD1.findIndex((t: any) => t.id === career.teamId || t.name === (careerTeam?.name || '')) + 1;
-          if (pos >= 1 && pos <= 4) {
-            // Clasificado a Champions League (Top 4)
-            careerQualifiedCLName = careerTeam?.name || sortedD1[pos - 1]?.name || null;
-          } else if (pos === 5 || pos === 6 || (career.compId === 'L7' && pos <= 8)) {
-            // Clasificado a UEFA Europa League (5.º y 6.º puesto)
-            careerQualifiedUELName = careerTeam?.name || sortedD1[pos - 1]?.name || null;
+    // 1. PRIMERO: Garantizar que TODAS las 8 ligas queden 100% terminadas en la temporada que finaliza
+    const finishedLeaguesState: any = { ...comps };
+    LEAGUE_IDS.forEach(id => {
+      let c = finishedLeaguesState[id];
+      if (!c) return;
+      if (!leagueSeasonOver(c)) {
+        const runDivToFinish = (teamsKey: string, mdKey: string, histKey: string, winKey: string, isDiv2?: boolean) => {
+          let guard = 0;
+          const total = divTotalRounds(c[teamsKey]);
+          while ((c[mdKey] || 0) < total && guard++ < 80) {
+            const prevMd = c[mdKey] || 0;
+            const res = simulateDivisionMatchday(c[teamsKey], prevMd, c[histKey] || [], id, isDiv2);
+            if (!res || !res.updatedTeams || res.nextMatchday <= prevMd) break;
+            c = {
+              ...c,
+              [teamsKey]: res.updatedTeams,
+              [mdKey]: res.nextMatchday,
+              [histKey]: res.newHistory,
+              [winKey]: res.isFinished ? true : c[winKey]
+            };
+            if (res.isFinished) break;
           }
+        };
+        runDivToFinish('teams', 'matchday', 'history', 'showWinner', false);
+        runDivToFinish('teams2', 'matchday2', 'history2', 'showWinner2', true);
+      }
+      
+      // Guardar la foto fija de la clasificación definitiva de esta temporada que acaba de terminar
+      const snap1 = buildStandingsSnapshot(c.teams);
+      const snap2 = buildStandingsSnapshot(c.teams2);
+      finishedLeaguesState[id] = {
+        ...c,
+        previousStandings: snap1,
+        previousStandings2: snap2,
+        isLeagueFinished: true
+      };
+    });
+
+    // 2. Determinar si el club del usuario en modo carrera clasificó a UCL o UEL en esta misma temporada finalizada
+    if (career.active && career.teamId && career.compId && finishedLeaguesState[career.compId]) {
+      const finishedComp = finishedLeaguesState[career.compId];
+      if (career.div === 1 && Array.isArray(finishedComp.teams)) {
+        const sortedD1 = [...finishedComp.teams].sort((a: any, b: any) => 
+          (b.pts || 0) - (a.pts || 0) || 
+          ((b.gf || 0) - (b.ga || 0)) - ((a.gf || 0) - (a.ga || 0)) || 
+          (b.gf || 0) - (a.gf || 0)
+        );
+        const pos = sortedD1.findIndex((t: any) => t.id === career.teamId || t.name === (careerTeam?.name || '')) + 1;
+        if (pos >= 1 && pos <= 4) {
+          // Clasificado a Champions League (Top 4)
+          careerQualifiedCLName = careerTeam?.name || sortedD1[pos - 1]?.name || null;
+        } else if (pos === 5 || pos === 6 || (career.compId === 'L7' && pos <= 8)) {
+          // Clasificado a UEFA Europa League (5.º y 6.º puesto)
+          careerQualifiedUELName = careerTeam?.name || sortedD1[pos - 1]?.name || null;
         }
       }
+    }
 
-      // 3. Generar la nueva Champions League (C1) TOMADA EXCLUSIVAMENTE de la temporada finalizada
+    // 3. Archivar títulos de liga de la temporada finalizada (fuera del state reducer para evitar re-render loops)
+    LEAGUE_IDS.forEach(id => {
+      const c = finishedLeaguesState[id];
+      if (!c) return;
+      const r1 = buildSeasonRecord(c.teams, seasonNow);
+      const r2 = buildSeasonRecord(c.teams2, seasonNow);
+      if (r1?.champion) {
+        seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
+        archiveCompetition(id, 1, r1.champion, c, true);
+      }
+      if (r2?.champion) {
+        seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
+        archiveCompetition(id, 2, r2.champion, c, true);
+      }
+    });
+
+    if (seasonTitles.length > 0) {
+      registerTitles(seasonTitles);
+    }
+
+    // 4. Actualizar estado de las competiciones en un único commit atómico
+    setComps(prev => {
+      const next = { ...prev };
+
+      // Champions League (C1) TOMADA EXCLUSIVAMENTE de la temporada finalizada
       const clPrevHist = prev['C1']?.championsHistory || [];
       const clNew = getAutoFillData('C1', finishedLeaguesState, careerQualifiedCLName ? [careerQualifiedCLName] : []);
       if (clNew) {
@@ -534,7 +557,7 @@ function DiceFootballApp() {
         next['C1'] = { ...defaults['C1'], season: seasonNow + 1, sourceSeason: seasonNow, championsHistory: clPrevHist };
       }
 
-      // 4. Generar la nueva UEFA Europa League (C3) TOMADA EXCLUSIVAMENTE de la misma temporada finalizada
+      // UEFA Europa League (C3) TOMADA EXCLUSIVAMENTE de la misma temporada finalizada
       const uelPrevHist = prev['C3']?.championsHistory || [];
       const uelNew = getAutoFillData('C3', finishedLeaguesState, careerQualifiedUELName ? [careerQualifiedUELName] : []);
       if (uelNew) {
@@ -557,20 +580,10 @@ function DiceFootballApp() {
         };
       }
 
-      // 5. SOLO AHORA, archivar títulos y avanzar las ligas a la nueva temporada (reseteo y ascensos/descensos)
+      // Avanzar las ligas a la nueva temporada (reseteo y ascensos/descensos)
       LEAGUE_IDS.forEach(id => {
         const c = finishedLeaguesState[id];
-        const r1 = buildSeasonRecord(c.teams, seasonNow);
-        const r2 = buildSeasonRecord(c.teams2, seasonNow);
-        if (r1) {
-          seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
-          archiveCompetition(id, 1, r1.champion, c);
-        }
-        if (r2) {
-          seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
-          archiveCompetition(id, 2, r2.champion, c);
-        }
-        
+        if (!c) return;
         const ns = computeLeagueNewSeason(c) || {};
         const prevSnapshot = buildStandingsSnapshot(c.teams);
         const prevSnapshot2 = buildStandingsSnapshot(c.teams2);
@@ -669,7 +682,7 @@ function DiceFootballApp() {
     } catch(e) {}
   };
 
-  const archiveCompetition = (compId, div, customWinner = null, compOverride = null) => {
+  const archiveCompetition = (compId: string, div: number, customWinner: any = null, compOverride: any = null, skipSetComps: boolean = false) => {
     const comp = compOverride || comps[compId];
     if (!comp) return;
     const isDiv2 = div === 2;
@@ -689,7 +702,7 @@ function DiceFootballApp() {
       }
     }
 
-    const currentSeasonNum = seasonState?.season || 1;
+    const currentSeasonNum = comp.season || seasonState?.season || 1;
     const uniqueArchId = `arch_${compId}_${div}_s${currentSeasonNum}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const entry = { 
       id: uniqueArchId, compId, name: comp.name, date: new Date().toLocaleDateString(), div, winner, 
@@ -725,35 +738,37 @@ function DiceFootballApp() {
         records: activeRecord?.records,
         season: currentSeasonNum
       });
-      if (comp.type !== 'league') {
-        const cupRecord = activeRecord || buildCupSeasonRecord(comp, currentSeasonNum, winner);
-        if (cupRecord) {
-          setComps(prev => {
-            const current = prev[compId];
-            if (!current) return prev;
-            return {
-              ...prev,
-              [compId]: {
-                ...current,
-                championsHistory: pushRecord(cupRecord, current.championsHistory)
-              }
-            };
-          });
-        }
-      } else {
-        const legRecord = activeRecord || buildSeasonRecord(t, currentSeasonNum);
-        if (legRecord) {
-          setComps(prev => {
-            const current = prev[compId];
-            if (!current) return prev;
-            return {
-              ...prev,
-              [compId]: {
-                ...current,
-                [isDiv2 ? 'championsHistory2' : 'championsHistory']: pushRecord(legRecord, current[isDiv2 ? 'championsHistory2' : 'championsHistory'])
-              }
-            };
-          });
+      if (!skipSetComps) {
+        if (comp.type !== 'league') {
+          const cupRecord = activeRecord || buildCupSeasonRecord(comp, currentSeasonNum, winner);
+          if (cupRecord) {
+            setComps(prev => {
+              const current = prev[compId];
+              if (!current) return prev;
+              return {
+                ...prev,
+                [compId]: {
+                  ...current,
+                  championsHistory: pushRecord(cupRecord, current.championsHistory)
+                }
+              };
+            });
+          }
+        } else {
+          const legRecord = activeRecord || buildSeasonRecord(t, currentSeasonNum);
+          if (legRecord) {
+            setComps(prev => {
+              const current = prev[compId];
+              if (!current) return prev;
+              return {
+                ...prev,
+                [compId]: {
+                  ...current,
+                  [isDiv2 ? 'championsHistory2' : 'championsHistory']: pushRecord(legRecord, current[isDiv2 ? 'championsHistory2' : 'championsHistory'])
+                }
+              };
+            });
+          }
         }
       }
     }
@@ -1820,13 +1835,15 @@ function DiceFootballApp() {
           }
         }
         let c3 = next['C3'];
-        if (c1 && Array.isArray(c1.groups) && (c1.matchday >= 6 || c1.phase !== 'groups')) {
+        const isClDone = !c1 || c1.phase !== 'groups' || (c1.matchday || 0) >= 6;
+        if (isClDone && c1 && Array.isArray(c1.groups)) {
           if (c3) {
             c3 = syncChampionsRepescadosToUEL(c1, c3);
             next['C3'] = c3;
           }
         }
-        if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
+        const canSimulateUelPhase = !c3 || c3.phase === 'Dieciseisavos' || isClDone;
+        if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado' && canSimulateUelPhase) {
           const expUelMd = getExpectedCupMatchdayForWeek('C3', currentWk);
           // Si el usuario compite en la Europa League y no ha jugado aún esta fecha, NO auto-simular la UEL
           if (hasEuropa && (!isCareerAliveInC3) && (expUelMd === null || (c3.matchday || 0) < expUelMd)) {
@@ -2338,16 +2355,48 @@ function DiceFootballApp() {
       }
     }
 
-    // 1. Simular jornada de Liga para el resto del mundo
-    if (hasLeague || !weekData) {
-      syncLeaguesToGlobal(LEAGUE_IDS);
-    }
+    let clWinnerToArchive: any = null;
+    let uelWinnerToArchive: any = null;
+    let finishedClComp: any = null;
+    let finishedUelComp: any = null;
 
-    // 2. Simular Competiciones Europeas (Champions League y Europa League sincronizadas)
-    if (hasChampions || hasEuropa) {
-      setComps(prev => {
-        let next = { ...prev };
+    setComps(prev => {
+      let next = { ...prev };
 
+      // 1. Simular jornada de Liga para el resto del mundo
+      if (hasLeague || !weekData) {
+        LEAGUE_IDS.forEach(compId => {
+          const comp = next[compId];
+          if (!comp || comp.type !== 'league') return;
+          let upd = { ...comp };
+          const runDiv = (teamsKey: string, mdKey: string, histKey: string, winKey: string, isDiv2?: boolean) => {
+            let guard = 0;
+            while (divPendingAt(upd[teamsKey], upd[mdKey], globalMatchday) && guard++ < 60) {
+              const prevMd = upd[mdKey] || 0;
+              const res = simulateDivisionMatchday(upd[teamsKey], upd[mdKey] || 0, upd[histKey] || [], compId, isDiv2);
+              if (!res || res.nextMatchday === prevMd) break;
+              upd = {
+                ...upd,
+                [teamsKey]: res.updatedTeams,
+                [mdKey]: res.nextMatchday,
+                [histKey]: res.newHistory,
+                [winKey]: res.isFinished ? true : upd[winKey]
+              };
+              if (res.isFinished) break;
+            }
+          };
+          runDiv('teams', 'matchday', 'history', 'showWinner', false);
+          runDiv('teams2', 'matchday2', 'history2', 'showWinner2', true);
+          if (leagueSeasonOver(upd)) {
+            upd.previousStandings = buildStandingsSnapshot(upd.teams) || upd.previousStandings || null;
+            upd.previousStandings2 = buildStandingsSnapshot(upd.teams2) || upd.previousStandings2 || null;
+          }
+          next[compId] = upd;
+        });
+      }
+
+      // 2. Simular Competiciones Europeas (Champions League y Europa League sincronizadas)
+      if (hasChampions || hasEuropa) {
         // 2a. Champions League
         let c1 = next['C1'];
         if (!c1 || !c1.teams || c1.teams.length === 0) {
@@ -2372,27 +2421,24 @@ function DiceFootballApp() {
         }
 
         // Sincronizar e inyectar automáticamente los 8 repescados reales de Champions si ya concluyó su fase de grupos
-        if (c1 && Array.isArray(c1.groups) && (c1.matchday >= 6 || c1.phase !== 'groups')) {
+        const isClDone = !c1 || c1.phase !== 'groups' || (c1.matchday || 0) >= 6;
+        if (isClDone && c1 && Array.isArray(c1.groups)) {
           if (c3) {
             c3 = syncChampionsRepescadosToUEL(c1, c3);
             next['C3'] = c3;
           }
         }
 
-        const canSimulateUel = hasEuropa && c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado' && (expUelMd === null || (c3.matchday || 0) < expUelMd);
+        const canSimulateUelPhase = !c3 || c3.phase === 'Dieciseisavos' || isClDone;
+        const canSimulateUel = hasEuropa && c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado' && canSimulateUelPhase && (expUelMd === null || (c3.matchday || 0) < expUelMd);
         if (canSimulateUel) {
-          c3 = simulateSingleCupStage(c3, 'C3');
+          c3 = simulateSingleCupStage(c3, 'C3', c1);
           next['C3'] = c3;
         }
+      }
 
-        return next;
-      });
-    }
-
-    // 3. Si alcanzamos o superamos la semana 42 (Cierre de Temporada), resolver cualquier liga o copa que quede pendiente al 100%
-    if (currentWk >= 42) {
-      setComps(prev => {
-        let next = { ...prev };
+      // 3. Si alcanzamos o superamos la semana 42 (Cierre de Temporada), resolver cualquier liga o copa que quede pendiente al 100%
+      if (currentWk >= 42) {
         LEAGUE_IDS.forEach(id => {
           let c = next[id];
           if (!c) return;
@@ -2401,8 +2447,9 @@ function DiceFootballApp() {
               let guard = 0;
               const total = divTotalRounds(c[teamsKey]);
               while ((c[mdKey] || 0) < total && guard++ < 80) {
+                const prevMd = c[mdKey] || 0;
                 const res = simulateDivisionMatchday(c[teamsKey], c[mdKey] || 0, c[histKey] || [], id, isDiv2);
-                if (!res) break;
+                if (!res || res.nextMatchday === prevMd) break;
                 c = {
                   ...c,
                   [teamsKey]: res.updatedTeams,
@@ -2410,47 +2457,71 @@ function DiceFootballApp() {
                   [histKey]: res.newHistory,
                   [winKey]: res.isFinished ? true : c[winKey]
                 };
+                if (res.isFinished) break;
               }
             };
             runDivToFinish('teams', 'matchday', 'history', 'showWinner', false);
             runDivToFinish('teams2', 'matchday2', 'history2', 'showWinner2', true);
+            if (leagueSeasonOver(c)) {
+              c.previousStandings = buildStandingsSnapshot(c.teams) || c.previousStandings || null;
+              c.previousStandings2 = buildStandingsSnapshot(c.teams2) || c.previousStandings2 || null;
+            }
             next[id] = c;
           }
         });
 
         // Asegurar conclusión de Champions si no ha finalizado
         let c1 = next['C1'];
+        if (!c1 || !c1.teams || c1.teams.length === 0) {
+          const autoData = getAutoFillData('C1', next);
+          if (autoData) c1 = { ...next['C1'], ...autoData, id: 'C1', name: 'Champions League', type: 'cup' };
+        }
         if (c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado') {
           const finishedC1 = simulateEntireCupToFinish(c1, 'C1');
           if (finishedC1.showWinner || finishedC1.phase === 'Terminado') {
             const final = finishedC1.bracket?.Final?.[0] || finishedC1.bracket?.Final;
-            let clWinner = null;
             if (final && final.sh !== null && final.sh !== undefined) {
               const winId = (final.sh > final.sa) ? final.hId : (final.sa > final.sh) ? final.aId : (((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId);
-              clWinner = finishedC1.teams?.find((t: any) => t.id === winId);
+              clWinnerToArchive = finishedC1.teams?.find((t: any) => t.id === winId);
+              finishedClComp = finishedC1;
             }
-            archiveCompetition('C1', 1, clWinner, finishedC1);
           }
           next['C1'] = finishedC1;
         }
+
         // Asegurar conclusión de Europa League si no ha finalizado
         let c3 = next['C3'];
+        if (!c3 || !c3.teams || c3.teams.length === 0) {
+          const autoData = getAutoFillData('C3', next);
+          if (autoData) c3 = { ...next['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
+        }
+        if (next['C1'] && Array.isArray(next['C1'].groups) && c3) {
+          c3 = syncChampionsRepescadosToUEL(next['C1'], c3);
+        }
         if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
-          const finishedC3 = simulateEntireCupToFinish(c3, 'C3');
+          const finishedC3 = simulateEntireCupToFinish(c3, 'C3', next['C1']);
           if (finishedC3.showWinner || finishedC3.phase === 'Terminado') {
             const final = finishedC3.bracket?.Final?.[0] || finishedC3.bracket?.Final;
-            let uelWinner = null;
             if (final && final.sh !== null && final.sh !== undefined) {
               const winId = (final.sh > final.sa) ? final.hId : (final.sa > final.sh) ? final.aId : (((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId);
-              uelWinner = finishedC3.teams?.find((t: any) => t.id === winId);
+              uelWinnerToArchive = finishedC3.teams?.find((t: any) => t.id === winId);
+              finishedUelComp = finishedC3;
             }
-            archiveCompetition('C3', 1, uelWinner, finishedC3);
           }
           next['C3'] = finishedC3;
         }
-        return next;
-      });
+      }
 
+      return next;
+    });
+
+    if (currentWk >= 42) {
+      if (clWinnerToArchive && finishedClComp) {
+        archiveCompetition('C1', 1, clWinnerToArchive, finishedClComp, true);
+      }
+      if (uelWinnerToArchive && finishedUelComp) {
+        archiveCompetition('C3', 1, uelWinnerToArchive, finishedUelComp, true);
+      }
       setSeasonState(s => ({
         ...s,
         currentWeek: 43,
@@ -2459,7 +2530,7 @@ function DiceFootballApp() {
       return;
     }
 
-    // 4. Incrementar la semana de la temporada (al pasar de 42 la temporada queda completada)
+    // 4. Incrementar la semana de la temporada
     setSeasonState(s => ({
       ...s,
       currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
@@ -2487,8 +2558,9 @@ function DiceFootballApp() {
           let guard = 0;
           const total = divTotalRounds(upd[teamsKey]);
           while ((upd[mdKey] || 0) < total && guard++ < 80) {
+            const prevMd = upd[mdKey] || 0;
             const res = simulateDivisionMatchday(upd[teamsKey], upd[mdKey] || 0, upd[histKey] || [], compId, isDiv2);
-            if (!res) break;
+            if (!res || res.nextMatchday === prevMd) break;
             touched = true;
             upd = {
               ...upd,
@@ -2497,6 +2569,7 @@ function DiceFootballApp() {
               [histKey]: res.newHistory,
               [winKey]: res.isFinished ? true : upd[winKey]
             };
+            if (res.isFinished) break;
           }
         };
         runDivToFinish('teams', 'matchday', 'history', 'showWinner', false);
@@ -3357,6 +3430,10 @@ function DiceFootballApp() {
     const phase = uelComp.phase || 'Dieciseisavos';
     const matchday = uelComp.matchday || 0;
 
+    const clComp = comps['C1'];
+    const isClGroupsFinished = Boolean(!clComp || clComp.phase !== 'groups' || (clComp.matchday || 0) >= 6);
+    if (phase !== 'Dieciseisavos' && !isClGroupsFinished) return;
+
     const baseTeamStats = {
       att: Math.max(career.baseDist?.att || 1, careerTeam.att || 1),
       opp: Math.max(career.baseDist?.opp || 1, careerTeam.opp || 1),
@@ -3591,6 +3668,10 @@ function DiceFootballApp() {
     const phase = uelComp.phase || 'Dieciseisavos';
     const matchday = uelComp.matchday || 0;
 
+    const clComp = comps['C1'];
+    const isClGroupsFinished = Boolean(!clComp || clComp.phase !== 'groups' || (clComp.matchday || 0) >= 6);
+    if (phase !== 'Dieciseisavos' && !isClGroupsFinished) return;
+
     const baseTeamStats = {
       att: Math.max(career.baseDist?.att || 1, careerTeam.att || 1),
       opp: Math.max(career.baseDist?.opp || 1, careerTeam.opp || 1),
@@ -3739,7 +3820,7 @@ function DiceFootballApp() {
   };
 
   // Simulación de una sola etapa / jornada de una copa (Champions, Europa League o Mundial)
-  const simulateSingleCupStage = (initialComp: any, compId: string = 'C1') => {
+  const simulateSingleCupStage = (initialComp: any, compId: string = 'C1', c1Override: any = null) => {
     if (!initialComp || initialComp.type === 'league') return initialComp;
     let comp = JSON.parse(JSON.stringify(initialComp));
     const targetId = comp.id || compId || (comp.name?.includes('Champions') || (Array.isArray(comp.groups) && comp.groups.length === 8) ? 'C1' : 'C2');
@@ -3748,6 +3829,17 @@ function DiceFootballApp() {
     const isWorldCup = targetId === 'C2' || comp.name?.includes('Mundial') || comp.name?.includes('World');
 
     if (comp.phase === 'Terminado' || comp.showWinner) return comp;
+
+    // Control cronológico estricto: UEL Octavos no puede disputarse si Champions League aún está en fase de grupos y los emparejamientos están incompletos
+    if (targetId === 'C3' && comp.phase !== 'Dieciseisavos') {
+      const c1 = c1Override || comps['C1'];
+      const octavosMatches = comp.bracket?.Octavos || [];
+      const octavosMissingTeams = Array.isArray(octavosMatches) && octavosMatches.some((m: any) => m.aId === null || m.hId === null);
+      const isC1Done = !c1 || c1.phase !== 'groups' || (c1.matchday || 0) >= 6;
+      if (octavosMissingTeams && !isC1Done) {
+        return comp;
+      }
+    }
 
     if (comp.phase === 'groups') {
       const maxMatchdays = isWorldCup ? 3 : 6;
@@ -3863,11 +3955,13 @@ function DiceFootballApp() {
 
         if (phase === 'Dieciseisavos') {
           nextPhase = 'Octavos';
+          const c1Comp = c1Override || comps['C1'];
+          const isC1Done = !c1Comp || c1Comp.phase !== 'groups' || (c1Comp.matchday || 0) >= 6;
           const repescadoTeams = (comp.teams || []).filter((t: any) => t.isRepesca || (t.clOrigin && t.clOrigin.includes('Repesca')));
           newBracket.Octavos = Array(8).fill(0).map((_, i) => ({
             id: 'O' + (i + 1),
             hId: winners[i] ?? null,
-            aId: repescadoTeams[i]?.id ?? (17 + i),
+            aId: isC1Done ? (repescadoTeams[i]?.id ?? (17 + i)) : (repescadoTeams[i]?.id ?? null),
             sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
           }));
         } else if (phase === 'Octavos') {
@@ -3939,13 +4033,18 @@ function DiceFootballApp() {
   };
 
   // Simulación completa de una copa / torneo hasta su finalización en una sola ejecución pura
-  const simulateEntireCupToFinish = (initialComp: any, compId: string = 'C1') => {
+  const simulateEntireCupToFinish = (initialComp: any, compId: string = 'C1', c1Override: any = null) => {
     if (!initialComp || initialComp.type === 'league') return initialComp;
     let comp = initialComp;
     let guard = 0;
     while (guard++ < 40) {
       if (comp.phase === 'Terminado' || comp.showWinner) break;
-      comp = simulateSingleCupStage(comp, compId);
+      const prevPhase = comp.phase;
+      const prevMd = comp.matchday;
+      comp = simulateSingleCupStage(comp, compId, c1Override);
+      if (comp.phase === prevPhase && comp.matchday === prevMd) {
+        break;
+      }
     }
     return comp;
   };
@@ -3953,6 +4052,9 @@ function DiceFootballApp() {
   // Simulación de todo el torneo Champions League restante hasta coronar al campeón
   const simulateAllCareerChampions = () => {
     const seasonNow = seasonState.season || 1;
+    let clWinnerToArchive: any = null;
+    let finishedClComp: any = null;
+
     setComps(prev => {
       let next = { ...prev };
       let c1 = next['C1'];
@@ -3990,15 +4092,14 @@ function DiceFootballApp() {
       }
 
       if (!c1 || c1.phase === 'Terminado' || c1.showWinner) return next;
-      const finishedC1 = simulateEntireCupToFinish(c1);
-      if (finishedC1.showWinner) {
+      const finishedC1 = simulateEntireCupToFinish(c1, 'C1');
+      if (finishedC1.showWinner || finishedC1.phase === 'Terminado') {
         const final = finishedC1.bracket?.Final?.[0] || finishedC1.bracket?.Final;
-        let clWinner = null;
         if (final && final.sh !== null && final.sh !== undefined) {
           const winId = (final.sh > final.sa) ? final.hId : (final.sa > final.sh) ? final.aId : (((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId);
-          clWinner = finishedC1.teams?.find((t: any) => t.id === winId);
+          clWinnerToArchive = finishedC1.teams?.find((t: any) => t.id === winId);
+          finishedClComp = finishedC1;
         }
-        archiveCompetition('C1', 1, clWinner, finishedC1);
       }
 
       // Sincronizar los 8 repescados reales a la UEFA Europa League (C3)
@@ -4021,6 +4122,11 @@ function DiceFootballApp() {
         C1: finishedC1
       };
     });
+
+    if (clWinnerToArchive && finishedClComp) {
+      archiveCompetition('C1', 1, clWinnerToArchive, finishedClComp, true);
+    }
+
     setCareer(c => (c.active ? { ...c, clSeason: seasonNow } : c));
     setSeasonState(s => ({ ...s, phase: 'champions', globalMatchday: 38 }));
   };
@@ -4552,6 +4658,15 @@ function DiceFootballApp() {
     const currentComp = comps[cId];
     if (!currentComp || currentComp.type === 'league') return;
     const isAutoSim = isAutoSimManual ?? (!ms && cupAutoSim);
+
+    // Control cronológico estricto: UEL Octavos no puede disputarse si Champions League aún está en fase de grupos
+    if (cId === 'C3' && currentComp.phase !== 'Dieciseisavos' && currentComp.phase !== 'Terminado') {
+      const c1 = comps['C1'];
+      const isC1Done = !c1 || c1.phase !== 'groups' || (c1.matchday || 0) >= 6;
+      if (!isC1Done) {
+        return;
+      }
+    }
     // Copas y Mundiales mantienen la lógica original sin divisiones múltiples
     const results: any[] = ms
       ? [{ hId: ms.home.id, aId: ms.away.id, sh: ms.scoreH, sa: ms.scoreA, penH: ms.penalties?.scoreH, penA: ms.penalties?.scoreA }]
@@ -4585,7 +4700,14 @@ function DiceFootballApp() {
        const isEndOfGroups = nextMatchday >= maxMatchdays;
        let newBracket = null;
        if (isEndOfGroups) newBracket = generateKnockoutBrackets({ ...currentComp, teams: updatedTeams });
-        const updatedComp = { teams: updatedTeams, history: [{ day: 'Jornada ' + nextMatchday, results }, ...currentComp.history], matchday: nextMatchday, phase: isEndOfGroups ? (newBracket.Octavos ? 'Octavos' : 'Cuartos') : 'groups', bracket: newBracket };
+        const updatedComp = { 
+          ...currentComp, 
+          teams: updatedTeams, 
+          history: [{ day: 'Jornada ' + nextMatchday, results }, ...currentComp.history], 
+          matchday: nextMatchday, 
+          phase: isEndOfGroups ? (newBracket.Octavos ? 'Octavos' : 'Cuartos') : 'groups', 
+          bracket: newBracket 
+        };
         updateCompById(cId, updatedComp);
 
         // Al culminar la fase de grupos de Champions League, inyectar los 8 terceros puestos en Europa League
@@ -4599,12 +4721,17 @@ function DiceFootballApp() {
               }
             }
             if (uel) {
+              const syncedUel = syncChampionsRepescadosToUEL(updatedComp, uel);
               return {
                 ...prev,
-                C3: syncChampionsRepescadosToUEL(updatedComp, uel)
+                C1: updatedComp,
+                C3: syncedUel
               };
             }
-            return prev;
+            return {
+              ...prev,
+              C1: updatedComp
+            };
           });
 
           // Actualizar transición de modo carrera si el club del usuario disputaba Champions
@@ -4721,11 +4848,13 @@ function DiceFootballApp() {
           });
           if (phase === 'Dieciseisavos') {
             nextPhase = 'Octavos';
-            const repescadoTeams = (currentComp.teams || []).filter((t: any) => t.isRepesca || (t.clOrigin && t.clOrigin.includes('Repesca')));
+            const c1Comp = comps['C1'];
+            const isC1Done = !c1Comp || c1Comp.phase !== 'groups' || (c1Comp.matchday || 0) >= 6;
+            const repescadoTeams = isC1Done ? (currentComp.teams || []).filter((t: any) => t.isRepesca || (t.clOrigin && t.clOrigin.includes('Repesca'))) : [];
             newBracket.Octavos = Array(8).fill(0).map((_, i) => ({
               id: 'O' + (i + 1),
               hId: winners[i] ?? null,
-              aId: repescadoTeams[i]?.id ?? (17 + i),
+              aId: isC1Done ? (repescadoTeams[i]?.id ?? (17 + i)) : null,
               sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
             }));
           } else if (phase === 'Octavos') {
@@ -4915,9 +5044,9 @@ function DiceFootballApp() {
   const handlePromotionAndNewSeason = () => {
     if (activeComp.type !== 'league') return;
 
-    // Archivamos a los campeones
-    archiveCompetition(activeCompId, 1);
-    archiveCompetition(activeCompId, 2);
+    // Archivamos a los campeones sin disparar setComps redundantes
+    archiveCompetition(activeCompId, 1, null, activeComp, true);
+    archiveCompetition(activeCompId, 2, null, activeComp, true);
 
     const ns = computeLeagueNewSeason(activeComp);
     if (!ns) return;
@@ -6337,6 +6466,21 @@ function DiceFootballApp() {
                      Esperando Jornada Global {globalMatchday + 1}
                    </button>
                  );
+              }
+              const isClGroupsFinished = Boolean(!comps['C1'] || comps['C1'].phase !== 'groups' || (comps['C1'].matchday || 0) >= 6);
+              const isUclWaitingForRepescados = activeCompId === 'C3' && activeComp.phase !== 'Dieciseisavos' && !isClGroupsFinished;
+              if (isUclWaitingForRepescados) {
+                return (
+                  <div className='p-4 rounded-2xl bg-gradient-to-r from-amber-950/60 via-slate-900/90 to-amber-950/50 border border-amber-500/30 text-center space-y-2'>
+                    <div className='flex items-center justify-center gap-1.5 text-amber-300 font-black text-xs uppercase tracking-wider'>
+                      <Trophy size={14} className='text-amber-400' />
+                      Esperando Cierre de Grupos UCL (Semana 18)
+                    </div>
+                    <p className='text-[10px] text-slate-300 font-medium leading-relaxed'>
+                      Los 8 repescados de Champions League (3.ºs de grupo) se definirán tras la Jornada 6. Los Octavos de Europa League se disputarán a la par con la Champions League en la <strong>Semana 25 (Ida)</strong> y <strong>Semana 27 (Vuelta)</strong>.
+                    </p>
+                  </div>
+                );
               }
               const isEuropeanOffWeek = (activeCompId === 'C1' && !isChampionsDate) || (activeCompId === 'C3' && !isEuropaDate);
               const targetWeek = activeCompId === 'C1' ? nextClWeek : nextUelWeek;
