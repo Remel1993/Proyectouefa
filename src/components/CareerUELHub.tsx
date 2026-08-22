@@ -306,9 +306,14 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
   const winnerTeam = useMemo(() => {
     if (!isFinished) return null;
     const final = safeBracket?.Final?.[0] || safeBracket?.Final;
-    if (!final || final.sh === null || final.sh === undefined) return null;
-    const winId = final.sh > final.sa ? final.hId : final.sa > final.sh ? final.aId : ((final.penH || 0) > (final.penA || 0) ? final.hId : final.aId);
-    return safeUelComp?.teams?.find((t: any) => t.id === winId) || null;
+    if (!final || final.sh === null || final.sh === undefined || final.sa === null || final.sa === undefined) return null;
+    let winId: number | string | null = null;
+    if (final.sh > final.sa) winId = final.hId;
+    else if (final.sa > final.sh) winId = final.aId;
+    else if (final.penH !== null && final.penH !== undefined && final.penA !== null && final.penA !== undefined && final.penH !== final.penA) {
+      winId = final.penH > final.penA ? final.hId : final.aId;
+    }
+    return winId ? (safeUelComp?.teams?.find((t: any) => t.id === winId) || null) : null;
   }, [isFinished, safeBracket, safeUelComp]);
 
   const isUserChampion = winnerTeam && careerUelTeam && winnerTeam.id === careerUelTeam.id;
@@ -869,12 +874,12 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
                         isFinishedMatch = true;
                         if (m.sh > m.sa) winnerId = m.hId;
                         else if (m.sa > m.sh) winnerId = m.aId;
-                        else if (m.penH !== null && m.penH !== undefined) winnerId = m.penH > m.penA ? m.hId : m.aId;
+                        else if (m.penH !== null && m.penH !== undefined && m.penA !== null && m.penA !== undefined && m.penH !== m.penA) winnerId = m.penH > m.penA ? m.hId : m.aId;
                       } else if (hasVuelta) {
                         isFinishedMatch = true;
                         if (totH > totA) winnerId = m.hId;
                         else if (totA > totH) winnerId = m.aId;
-                        else if (m.penH !== null && m.penH !== undefined) winnerId = m.penH > m.penA ? m.hId : m.aId;
+                        else if (m.penH !== null && m.penH !== undefined && m.penA !== null && m.penA !== undefined && m.penH !== m.penA) winnerId = m.penH > m.penA ? m.hId : m.aId;
                       }
 
                       const isWinnerH = isFinishedMatch && winnerId === m.hId;

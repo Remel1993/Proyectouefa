@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { roll1D6 } from '../lib/career';
 import {
   Dumbbell, Dices, HeartPulse, AlertTriangle, ShieldCheck, Check,

@@ -5,7 +5,7 @@ import {
   Shield as ShieldIcon, Info, AlertTriangle, Check, Users, BarChart3,
   Sparkles, Trophy, Layers, Dices, X
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Shield, AttrStepper, MenuButton } from '@/components/ui/GameUI';
 import { CompetitionLogo } from '@/components/CompetitionLogo';
 import { PRESETS, PRESETS_2 } from '@/lib/presets';

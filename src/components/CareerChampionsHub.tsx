@@ -167,8 +167,8 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                 let winnerId = null;
                 if (totHId > totAId) winnerId = bMatch.hId;
                 else if (totAId > totHId) winnerId = bMatch.aId;
-                else if (bMatch.penH !== null && bMatch.penH !== undefined) {
-                  winnerId = (bMatch.penH || 0) > (bMatch.penA || 0) ? bMatch.hId : bMatch.aId;
+                else if (bMatch.penH !== null && bMatch.penH !== undefined && bMatch.penA !== null && bMatch.penA !== undefined && bMatch.penH !== bMatch.penA) {
+                  winnerId = bMatch.penH > bMatch.penA ? bMatch.hId : bMatch.aId;
                 }
                 if (winnerId !== null) {
                   qualified = winnerId === userClId;
@@ -1322,11 +1322,11 @@ export const CareerChampionsHub: React.FC<CareerChampionsHubProps> = ({
                             const totA = (m.sa || 0) + (m.sa2 || 0);
                             if (totH > totA) winner = h;
                             else if (totA > totH) winner = a;
-                            else if (m.penH !== null && m.penH !== undefined) winner = m.penH > m.penA ? h : a;
+                            else if (m.penH !== null && m.penH !== undefined && m.penA !== null && m.penA !== undefined && m.penH !== m.penA) winner = m.penH > m.penA ? h : a;
                           } else {
                             if (m.sh > m.sa) winner = h;
                             else if (m.sa > m.sh) winner = a;
-                            else if (m.penH !== null && m.penH !== undefined) winner = m.penH > m.penA ? h : a;
+                            else if (m.penH !== null && m.penH !== undefined && m.penA !== null && m.penA !== undefined && m.penH !== m.penA) winner = m.penH > m.penA ? h : a;
                           }
                         }
 

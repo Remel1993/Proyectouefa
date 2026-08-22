@@ -13,7 +13,7 @@ import {
   Eye,
   ShieldCheck
 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 
 export interface SimulationFeedback {
   isChampions?: boolean;

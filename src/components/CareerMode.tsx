@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useMemo, useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   ChevronLeft, Trophy, Dices, Star, TrendingUp, Users, BarChart3, Swords,
   Briefcase, Target, Sparkles, AlertTriangle, AlertOctagon, Trash2, Check, X, Globe, History, Newspaper, Play,

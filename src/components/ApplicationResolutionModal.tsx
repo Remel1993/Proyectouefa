@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle, XCircle, Sparkles, AlertTriangle, FileSignature,
   Clock, Check, X, ChevronRight, Briefcase, Mail, Shield as ShieldIcon, Target

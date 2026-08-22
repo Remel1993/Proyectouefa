@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { Trophy, CheckCircle2, XCircle, Inbox, FileText, ArrowRight, Shield as ShieldIcon, RotateCcw, X, ChevronLeft } from 'lucide-react';
 
 interface EndSeasonModalProps {

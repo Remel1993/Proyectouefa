@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Radio, AlertCircle, Briefcase, Newspaper, Pause, Play, ChevronLeft, ChevronRight, List, X, Sparkles } from 'lucide-react';
 
 export interface Rumor {

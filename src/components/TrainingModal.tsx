@@ -1,6 +1,6 @@
 // @ts-nocheck
 import React, { useState, useMemo, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import {
   X, Dumbbell, Award, Zap, HeartPulse, Check, RotateCcw,
   Plus, Minus, ShieldCheck, TrendingUp, Sparkles, AlertCircle

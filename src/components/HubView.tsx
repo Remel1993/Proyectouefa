@@ -5,14 +5,15 @@ import {
   Sparkles, FastForward, Check, Flame, ChevronLeft, Info, X, Dices, 
   ArrowRight, Briefcase, Shield as ShieldIcon
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 import { Shield } from '@/components/ui/GameUI';
 import { CompetitionLogo } from '@/components/CompetitionLogo';
 import { 
   isChampionsMatchWeek, isEuropaLeagueMatchWeek, 
   getSemanaCalendario, getTotalCalendarWeeks,
   SEASON_CALENDAR_42_WEEKS, isChampionsWeek, getNextChampionsWeek, 
-  isEuropaLeagueWeek, getNextEuropaLeagueWeek
+  isEuropaLeagueWeek, getNextEuropaLeagueWeek,
+  getWeekForLeagueMatchday, getExpectedCupMatchdayForWeek
 } from '@/lib/seasonCalendar';
 import { divTotalRounds, leagueTotalRounds, leagueSeasonOver, leagueProgressLabel } from '@/lib/leagueEngine';
 import championsStadiumBg from '@/assets/images/champions_league_stadium_1786921289637.jpg';
@@ -41,7 +42,23 @@ export const HubView = ({
 }) => {
   const [showLeagues, setShowLeagues] = useState(false);
   const globalMatchday = seasonState?.globalMatchday || 1;
-  const currentWeek = seasonState?.currentWeek || 1;
+  const rawCurrentWeek = seasonState?.currentWeek || 1;
+
+  // Sincronización robusta de la semana actual con el progreso real de las competiciones
+  const currentWeek = useMemo(() => {
+    if (allLeaguesFinished && championsFinished) {
+      return 42;
+    }
+    if (allLeaguesFinished) {
+      return Math.min(42, Math.max(40, rawCurrentWeek));
+    }
+    if (globalMatchday > 1) {
+      const expWeek = getWeekForLeagueMatchday(globalMatchday);
+      return expWeek || rawCurrentWeek;
+    }
+    return Math.min(3, Math.max(1, rawCurrentWeek));
+  }, [allLeaguesFinished, championsFinished, globalMatchday, rawCurrentWeek]);
+
   const weekData = useMemo(() => getSemanaCalendario(currentWeek) || SEASON_CALENDAR_42_WEEKS[0], [currentWeek]);
   const isChampionsDate = isChampionsMatchWeek(currentWeek) || (allLeaguesFinished && currentWeek <= 41 && !comps['C1']?.showWinner && comps['C1']?.phase !== 'Terminado');
   const nextClWeek = getNextChampionsWeek(currentWeek);
@@ -61,6 +78,97 @@ export const HubView = ({
 
   const playableFixtures = weekData?.fixtures?.filter(f => f.esPartido) || [];
   const milestones = weekData?.fixtures?.filter(f => !f.esPartido) || [];
+
+  const getFixtureBadge = (fix: any) => {
+    if (!fix.esPartido) {
+      return (
+        <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300 border border-amber-500/30 whitespace-nowrap'>
+          Hito
+        </span>
+      );
+    }
+    if (fix.competicion === 'LIGA') {
+      if (allLeaguesFinished || (fix.leagueMatchday && globalMatchday > fix.leagueMatchday)) {
+        return (
+          <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-white/10 whitespace-nowrap flex items-center gap-1'>
+            <Check size={8} className='text-emerald-400' /> Jugado
+          </span>
+        );
+      }
+      if (fix.leagueMatchday === globalMatchday) {
+        if (pendingLeagueIds && pendingLeagueIds.length > 0 && pendingLeagueIds.length < leagues.length) {
+          return (
+            <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300 border border-amber-500/40 whitespace-nowrap animate-pulse'>
+              En Juego ({leagues.length - pendingLeagueIds.length}/{leagues.length})
+            </span>
+          );
+        }
+        return (
+          <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 whitespace-nowrap'>
+            Esta Semana
+          </span>
+        );
+      }
+      return (
+        <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-400/20 whitespace-nowrap'>
+          Próximo
+        </span>
+      );
+    }
+    if (fix.competicion === 'CHAMPIONS') {
+      const c1 = comps?.['C1'];
+      if (c1?.showWinner || c1?.phase === 'Terminado') {
+        return (
+          <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-white/10 whitespace-nowrap flex items-center gap-1'>
+            <Check size={8} className='text-blue-400' /> Jugado
+          </span>
+        );
+      }
+      const expMd = getExpectedCupMatchdayForWeek('C1', currentWeek);
+      const c1Md = c1?.matchday || 0;
+      if (expMd !== null && c1Md >= expMd) {
+        return (
+          <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-white/10 whitespace-nowrap flex items-center gap-1'>
+            <Check size={8} className='text-blue-400' /> Jugado
+          </span>
+        );
+      }
+      return (
+        <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/30 text-blue-300 border border-blue-400/30 whitespace-nowrap'>
+          Esta Semana
+        </span>
+      );
+    }
+    if (fix.competicion === 'EUROPA_LEAGUE') {
+      const c3 = comps?.['C3'];
+      if (c3?.showWinner || c3?.phase === 'Terminado') {
+        return (
+          <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-white/10 whitespace-nowrap flex items-center gap-1'>
+            <Check size={8} className='text-amber-400' /> Jugado
+          </span>
+        );
+      }
+      const expMd = getExpectedCupMatchdayForWeek('C3', currentWeek);
+      const c3Md = c3?.matchday || 0;
+      if (expMd !== null && c3Md >= expMd) {
+        return (
+          <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-300 border border-white/10 whitespace-nowrap flex items-center gap-1'>
+            <Check size={8} className='text-amber-400' /> Jugado
+          </span>
+        );
+      }
+      return (
+        <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300 border border-amber-400/30 whitespace-nowrap'>
+          Esta Semana
+        </span>
+      );
+    }
+    return (
+      <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 whitespace-nowrap'>
+        Partido
+      </span>
+    );
+  };
 
   return (
     <div className='flex-grow flex flex-col px-3.5 sm:px-4 pb-12 space-y-4'>
@@ -224,15 +332,7 @@ export const HubView = ({
                     <span className='text-[6.5px] sm:text-[7.5px] font-bold uppercase tracking-wider opacity-75 px-1 py-0.5 rounded bg-black/30 whitespace-nowrap'>
                       {fix.slot === 'FINDE' ? 'Fin de Sem.' : fix.slot === 'MITAD' ? 'Entre Sem.' : 'F. Única'}
                     </span>
-                    {fix.esPartido ? (
-                      <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 whitespace-nowrap'>
-                        Partido
-                      </span>
-                    ) : (
-                      <span className='text-[6.5px] sm:text-[7.5px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-300 border border-amber-500/30 whitespace-nowrap'>
-                        Hito
-                      </span>
-                    )}
+                    {getFixtureBadge(fix)}
                   </div>
                 </div>
                 {fix.desc && (
