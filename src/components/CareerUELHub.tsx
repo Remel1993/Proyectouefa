@@ -67,8 +67,8 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
 
   // Sanitizar equipos y evitar duplicados de Champions en UEL
   const safeUelComp = useMemo(() => {
-    return sanitizeEuropaLeagueTeams(uelComp);
-  }, [uelComp]);
+    return sanitizeEuropaLeagueTeams(uelComp, clComp);
+  }, [uelComp, clComp]);
 
   // Identificar el equipo del modo carrera dentro de la UEFA Europa League (C3)
   const careerUelTeam = useMemo(() => {
