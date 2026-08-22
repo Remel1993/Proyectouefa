@@ -16,7 +16,23 @@ export interface TitleEntry {
   compName: string;
   type?: 'league' | 'cup';
   div: number;
-  winner: { name: string; color1?: string; color2?: string; isFlag?: boolean };
+  winner: { name: string; color1?: string; color2?: string; isFlag?: boolean; pts?: number; gf?: number; ga?: number; w?: number; d?: number; l?: number };
+  runnerUp?: { name: string; color1?: string; color2?: string; isFlag?: boolean; pts?: number } | null;
+  thirdPlace?: { name: string; color1?: string; color2?: string; isFlag?: boolean; pts?: number } | null;
+  finalMatch?: {
+    homeName: string;
+    awayName: string;
+    homeScore: number;
+    awayScore: number;
+    penH?: number | null;
+    penA?: number | null;
+  } | null;
+  records?: {
+    topScoring: { name: string; value: number };
+    bestDefense: { name: string; value: number };
+    bestGoalDiff: { name: string; value: number };
+    mostWins: { name: string; value: number };
+  };
   season: number;
   date?: string;
 }
@@ -32,12 +48,12 @@ const isDuplicate = (existing: TitleEntry, candidate: TitleEntry) => {
   if (candidate.id && existing.id && candidate.id === existing.id) return true;
   if (candidate.type === 'league' || (!candidate.type && candidate.compId !== 'C1' && candidate.compId !== 'C2' && candidate.compId !== 'C3')) {
     return existing.compId === candidate.compId &&
-      existing.div === candidate.div &&
-      existing.season === candidate.season;
+      Number(existing.div || 1) === Number(candidate.div || 1) &&
+      Number(existing.season) === Number(candidate.season);
   }
   return existing.compId === candidate.compId &&
-    existing.div === candidate.div &&
-    existing.season === candidate.season &&
+    Number(existing.div || 1) === Number(candidate.div || 1) &&
+    Number(existing.season) === Number(candidate.season) &&
     existing.winner?.name === candidate.winner?.name;
 };
 
@@ -66,18 +82,35 @@ export const getTitles = (): TitleEntry[] => {
   }
 };
 
-// Guardar un único título (evita duplicados por temporada/competición)
+// Guardar un único título (actualiza si trae récords más completos)
 export const registerTitle = (entry: TitleEntry) => {
   if (!entry || !entry.winner || !entry.winner.name) return;
   const all = getTitles();
-  const exists = all.some((e) => isDuplicate(e, entry));
-  if (!exists) {
+  const existingIdx = all.findIndex((e) => isDuplicate(e, entry));
+  if (existingIdx === -1) {
     all.push(entry);
     if (typeof window !== 'undefined') {
       localStorage.setItem(PALMARES_STORAGE_KEY, JSON.stringify(all));
     }
-    // Notificar a los suscriptores
     notifySubscribers();
+  } else {
+    // Si ya existe pero el nuevo trae más datos (records, runnerUp, finalMatch), actualizarlo
+    const existing = all[existingIdx];
+    if (entry.records || entry.runnerUp || entry.finalMatch || (entry.winner?.pts && !existing.winner?.pts)) {
+      all[existingIdx] = {
+        ...existing,
+        ...entry,
+        winner: { ...existing.winner, ...entry.winner },
+        records: entry.records || existing.records,
+        runnerUp: entry.runnerUp !== undefined ? entry.runnerUp : existing.runnerUp,
+        thirdPlace: entry.thirdPlace !== undefined ? entry.thirdPlace : existing.thirdPlace,
+        finalMatch: entry.finalMatch || existing.finalMatch
+      };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(PALMARES_STORAGE_KEY, JSON.stringify(all));
+      }
+      notifySubscribers();
+    }
   }
 };
 
@@ -88,10 +121,24 @@ export const registerTitles = (entries: TitleEntry[]) => {
   let changed = false;
   entries.forEach((entry) => {
     if (!entry || !entry.winner || !entry.winner.name) return;
-    const exists = all.some((e) => isDuplicate(e, entry));
-    if (!exists) {
+    const existingIdx = all.findIndex((e) => isDuplicate(e, entry));
+    if (existingIdx === -1) {
       all.push(entry);
       changed = true;
+    } else {
+      const existing = all[existingIdx];
+      if (entry.records || entry.runnerUp || entry.finalMatch || (entry.winner?.pts && !existing.winner?.pts)) {
+        all[existingIdx] = {
+          ...existing,
+          ...entry,
+          winner: { ...existing.winner, ...entry.winner },
+          records: entry.records || existing.records,
+          runnerUp: entry.runnerUp !== undefined ? entry.runnerUp : existing.runnerUp,
+          thirdPlace: entry.thirdPlace !== undefined ? entry.thirdPlace : existing.thirdPlace,
+          finalMatch: entry.finalMatch || existing.finalMatch
+        };
+        changed = true;
+      }
     }
   });
   if (changed) {

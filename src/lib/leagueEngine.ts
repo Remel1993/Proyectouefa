@@ -85,8 +85,14 @@ export const leagueProgressLabel = (comp: any, globalMatchday: number) => {
 // Los equipos ascienden y descienden manteniendo exactamente sus estadísticas reales a nivel europeo de la app
 export const computeLeagueNewSeason = (comp: any) => {
   if (!comp || comp.type !== 'league') return null;
-  const sorted1 = [...(comp.teams || [])].sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
-  const sorted2 = [...(comp.teams2 || [])].sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
+  const sortFn = (a: any, b: any) => 
+    (b.pts - a.pts) || 
+    ((b.gf - b.ga) - (a.gf - a.ga)) || 
+    (b.gf - a.gf) || 
+    (a.name || '').localeCompare(b.name || '');
+
+  const sorted1 = [...(comp.teams || [])].sort(sortFn);
+  const sorted2 = [...(comp.teams2 || [])].sort(sortFn);
   
   const resetStats = (t: any) => {
     const authentic = getAuthenticTeamStats(t);
