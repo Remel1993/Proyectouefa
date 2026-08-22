@@ -27,8 +27,8 @@ export interface ChampionsBracket {
 
 /**
  * Sanitiza y auto-repara el bracket de Champions League y Europa League para asegurar que no existan
- * estados corruptos o incompletos (por ejemplo, llaves donde se disputó la ida y se avanzó de ronda
- * pero faltaron los datos de la vuelta).
+ * estados corruptos, incompletos o filtraciones prematuras de equipos en rondas futuras
+ * antes de que se hayan disputado y concluido las eliminatorias previas.
  */
 export const sanitizeChampionsBracket = (
   bracket: any,
@@ -60,6 +60,19 @@ export const sanitizeChampionsBracket = (
 
     newBracket[p] = newBracket[p].map((m: any, mIdx: number) => {
       if (!m) return m;
+
+      // Si el partido no tiene equipos definidos en ambos lados, no puede tener goles ni penaltis registrados
+      if (m.hId === null || m.hId === undefined || m.aId === null || m.aId === undefined) {
+        return {
+          ...m,
+          sh: null,
+          sa: null,
+          sh2: null,
+          sa2: null,
+          penH: null,
+          penA: null
+        };
+      }
 
       // Determinar el equipo que avanzó a la siguiente ronda
       let advancedTeamId: number | null = null;
@@ -121,16 +134,45 @@ export const sanitizeChampionsBracket = (
       return m;
     });
 
-    // Validar y limpiar llaves posteriores para que ningún equipo eliminado aparezca en fases siguientes
+    // Validar y limpiar llaves posteriores para que ningún equipo eliminado ni prematuro aparezca en fases siguientes
     if (Array.isArray(newBracket[p])) {
       newBracket[p].forEach((m: any, mIdx: number) => {
         if (!m) return;
         const isTwoLegged = p !== 'Final';
-        const isMatchConcluded = isTwoLegged
-          ? (m.sh !== null && m.sh !== undefined && m.sh2 !== null && m.sh2 !== undefined)
-          : (m.sh !== null && m.sh !== undefined);
+        const isMatchConcluded = (m.hId !== null && m.hId !== undefined && m.aId !== null && m.aId !== undefined) && (
+          isTwoLegged
+            ? (m.sh !== null && m.sh !== undefined && m.sh2 !== null && m.sh2 !== undefined)
+            : (m.sh !== null && m.sh !== undefined)
+        );
 
-        if (!isMatchConcluded) return;
+        if (!isMatchConcluded) {
+          // Si el partido de esta fase AÚN NO HA CONCLUIDO, vaciar inmediatamente el cupo en la fase siguiente
+          if (p === 'Dieciseisavos' && newBracket.Octavos?.[mIdx]) {
+            newBracket.Octavos[mIdx].hId = null;
+            newBracket.Octavos[mIdx].aId = null;
+          } else if (p === 'Octavos' && newBracket.Cuartos) {
+            const cIdx = Math.floor(mIdx / 2);
+            const isH = mIdx % 2 === 0;
+            if (newBracket.Cuartos[cIdx]) {
+              if (isH) newBracket.Cuartos[cIdx].hId = null;
+              else newBracket.Cuartos[cIdx].aId = null;
+            }
+          } else if (p === 'Cuartos' && newBracket.Semis) {
+            const sIdx = Math.floor(mIdx / 2);
+            const isH = mIdx % 2 === 0;
+            if (newBracket.Semis[sIdx]) {
+              if (isH) newBracket.Semis[sIdx].hId = null;
+              else newBracket.Semis[sIdx].aId = null;
+            }
+          } else if (p === 'Semis' && newBracket.Final) {
+            const finalMatch = Array.isArray(newBracket.Final) ? newBracket.Final[0] : newBracket.Final;
+            if (finalMatch) {
+              if (mIdx === 0) finalMatch.hId = null;
+              if (mIdx === 1) finalMatch.aId = null;
+            }
+          }
+          return;
+        }
 
         const totH = isTwoLegged ? ((m.sh || 0) + (m.sh2 || 0)) : (m.sh || 0);
         const totA = isTwoLegged ? ((m.sa || 0) + (m.sa2 || 0)) : (m.sa || 0);
@@ -142,7 +184,7 @@ export const sanitizeChampionsBracket = (
 
         const loser = winner === m.hId ? m.aId : m.hId;
 
-        // Propagar el ganador a la fase inmediatamente posterior
+        // Propagar el ganador a la fase inmediatamente posterior sólo si la eliminatoria terminó
         if (p === 'Dieciseisavos' && newBracket.Octavos?.[mIdx]) {
           newBracket.Octavos[mIdx].hId = winner;
         } else if (p === 'Octavos' && newBracket.Cuartos) {
@@ -225,6 +267,103 @@ export const extractChampionsRepescados = (c1Comp: any): any[] => {
 };
 
 /**
+ * Sanitiza y repara la lista de los 24 equipos de UEFA Europa League (C3).
+ * Asegura que:
+ * 1. Los 16 primeros equipos (IDs 1..16) correspondan a los clasificados por ligas.
+ * 2. Los 8 equipos restantes (IDs 17..24) correspondan a los repescados de Champions League.
+ * 3. NUNCA exista un equipo duplicado (por ejemplo, si el equipo del usuario clasifica por liga,
+ *    no debe figurar repetido en los puestos 17..24 como repescado de Champions).
+ */
+export const sanitizeEuropaLeagueTeams = (uelComp: any, c1Comp?: any): any => {
+  if (!uelComp || !Array.isArray(uelComp.teams) || uelComp.teams.length === 0) {
+    return uelComp;
+  }
+
+  const rawTeams: any[] = uelComp.teams;
+  // Extraer los 16 equipos de liga (IDs 1..16)
+  const leagueTeams = rawTeams.filter((t: any) => !t.isRepesca && t.id <= 16);
+  
+  // Si no tienen IDs canónicos 1..16, tomar los primeros 16 que no sean repescas
+  const resolvedLeagueTeams: any[] = (leagueTeams.length >= 16 ? leagueTeams.slice(0, 16) : rawTeams.slice(0, 16)).map((t: any, i: number) => ({
+    ...t,
+    id: i + 1,
+    isRepesca: false
+  }));
+
+  const leagueNames = new Set<string>(resolvedLeagueTeams.map(t => t.name));
+  const usedNames = new Set<string>(leagueNames);
+
+  // Extraer los 8 repescados (IDs 17..24)
+  const rawRepescados = rawTeams.filter((t: any) => t.isRepesca || t.id > 16);
+  const cleanRepescados: any[] = [];
+
+  // Si c1Comp está disponible y ha finalizado grupos, intentar usar los terceros puestos reales
+  const c1Repescados = c1Comp ? extractChampionsRepescados(c1Comp) : [];
+  c1Repescados.forEach((r: any) => {
+    if (r && r.name && !usedNames.has(r.name) && cleanRepescados.length < 8) {
+      usedNames.add(r.name);
+      cleanRepescados.push({
+        ...r,
+        id: 17 + cleanRepescados.length,
+        isRepesca: true
+      });
+    }
+  });
+
+  // Conservar repescados previos que sean legítimos y no colisionen con los equipos de liga
+  rawRepescados.forEach((r: any) => {
+    if (r && r.name && !usedNames.has(r.name) && cleanRepescados.length < 8) {
+      usedNames.add(r.name);
+      cleanRepescados.push({
+        ...r,
+        id: 17 + cleanRepescados.length,
+        isRepesca: true
+      });
+    }
+  });
+
+  // Si aún faltan repescados para completar los 8 (por haber eliminado duplicados), rellenar con clubes auténticos de PRESETS
+  if (cleanRepescados.length < 8) {
+    const fallbackCodes = ['ES', 'EN', 'IT', 'DE', 'FR', 'NL', 'MI', 'MB'];
+    let idx = 0;
+    while (cleanRepescados.length < 8 && idx < fallbackCodes.length * 4) {
+      const code = fallbackCodes[idx % fallbackCodes.length];
+      const presets = PRESETS[code] || [];
+      const cand = presets.find(p => p && !usedNames.has(p.name));
+      if (cand && !usedNames.has(cand.name)) {
+        usedNames.add(cand.name);
+        const groupLetter = String.fromCharCode(65 + cleanRepescados.length);
+        cleanRepescados.push({
+          ...cand,
+          id: 17 + cleanRepescados.length,
+          isRepesca: true,
+          league: code,
+          clOrigin: `Champions League (3.º Grupo ${groupLetter})`
+        });
+      }
+      idx++;
+    }
+  }
+
+  const finalizedTeams = [...resolvedLeagueTeams, ...cleanRepescados.slice(0, 8)];
+
+  // Sincronizar careerTeamId si el equipo del usuario está en la lista
+  let careerTeamId = uelComp.careerTeamId;
+  if (uelComp.careerTeamName) {
+    const found = finalizedTeams.find(t => t.name === uelComp.careerTeamName);
+    if (found) {
+      careerTeamId = found.id;
+    }
+  }
+
+  return {
+    ...uelComp,
+    teams: finalizedTeams,
+    careerTeamId: careerTeamId ?? uelComp.careerTeamId
+  };
+};
+
+/**
  * Inyecta los 8 repescados reales de Champions League en la estructura de UEFA Europa League (C3)
  * y sincroniza las llaves de Octavos de Final con los ganadores de Dieciseisavos.
  */
@@ -233,32 +372,65 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   
   // Si la Europa League ya disputó Dieciseisavos y ya avanzó a Octavos, Cuartos, Semis o Final, no alterar la llave
   if (uelComp.phase && uelComp.phase !== 'Dieciseisavos' && (uelComp.matchday || 0) >= 2) {
-    return uelComp;
+    return sanitizeEuropaLeagueTeams(uelComp, c1Comp);
   }
 
   // Si Champions aún está en grupos y no ha completado las 6 jornadas, no sincronizar prematuramente
   if (c1Comp?.phase === 'groups' && (c1Comp?.matchday || 0) < 6) {
-    return uelComp;
+    return sanitizeEuropaLeagueTeams(uelComp, c1Comp);
   }
 
   const realRepescados = extractChampionsRepescados(c1Comp);
   if (realRepescados.length < 8) {
-    return uelComp;
+    return sanitizeEuropaLeagueTeams(uelComp, c1Comp);
   }
 
   // Conservar los 16 equipos de liga originales (IDs 1..16)
   const leagueTeams = (uelComp.teams || []).filter((t: any) => !t.isRepesca && t.id <= 16);
+  const leagueTeamNames = new Set(leagueTeams.map(t => t.name));
   
+  // Filtrar repescados para que ninguno sea un equipo que ya esté en leagueTeams
+  const safeRealRepescados = realRepescados.filter((r: any) => !leagueTeamNames.has(r.name));
+  const usedRepescaNames = new Set<string>(safeRealRepescados.map((r: any) => r.name));
+
+  const fallbackCodes = ['ES', 'EN', 'IT', 'DE', 'FR', 'NL', 'MI', 'MB'];
+  let fbIdx = 0;
+  while (safeRealRepescados.length < 8 && fbIdx < fallbackCodes.length * 4) {
+    const code = fallbackCodes[fbIdx % fallbackCodes.length];
+    const presets = PRESETS[code] || [];
+    const cand = presets.find(p => p && !leagueTeamNames.has(p.name) && !usedRepescaNames.has(p.name));
+    if (cand) {
+      usedRepescaNames.add(cand.name);
+      const groupLetter = String.fromCharCode(65 + safeRealRepescados.length);
+      safeRealRepescados.push({
+        ...cand,
+        id: 17 + safeRealRepescados.length,
+        isRepesca: true,
+        league: code,
+        clOrigin: `Champions League (3.º Grupo ${groupLetter})`
+      });
+    }
+    fbIdx++;
+  }
+
   // Asegurar que tenemos exactamente 16 de liga y 8 repescados (total 24)
-  const updatedTeams = [...leagueTeams.slice(0, 16), ...realRepescados.slice(0, 8)];
+  const updatedTeams = [
+    ...leagueTeams.slice(0, 16),
+    ...safeRealRepescados.slice(0, 8).map((r: any, idx: number) => ({
+      ...r,
+      id: 17 + idx,
+      isRepesca: true
+    }))
+  ];
 
   // Actualizar el bracket de Octavos para que 'aId' apunte fielmente a los IDs 17..24
   const updatedBracket = { ...(uelComp.bracket || {}) };
   
-  // Verificar si Dieciseisavos ya se disputó para poblar hId con los clasificados
+  // Verificar si Dieciseisavos ya se disputó para poblar hId con los clasificados y aId con los repescados
   let dieciseisavosWinners: (number | null)[] = Array(8).fill(null);
+  let isVueltaPlayed = false;
   if (Array.isArray(updatedBracket.Dieciseisavos) && updatedBracket.Dieciseisavos.length === 8) {
-    const isVueltaPlayed = updatedBracket.Dieciseisavos.every((m: any) => m && m.sh2 !== null && m.sh2 !== undefined);
+    isVueltaPlayed = updatedBracket.Dieciseisavos.every((m: any) => m && m.sh2 !== null && m.sh2 !== undefined);
     if (isVueltaPlayed) {
       dieciseisavosWinners = updatedBracket.Dieciseisavos.map((m: any) => {
         // En la ida: m.sh (goles de m.hId), m.sa (goles de m.aId)
@@ -272,18 +444,19 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
     }
   }
 
+  // IMPORTANTE: Si Dieciseisavos aún NO se ha jugado completamente (vuelta),
+  // los cruces de Octavos deben figurar con hId: null y aId: null ("Por definir").
   if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
-    const isVueltaPlayed = Array.isArray(updatedBracket.Dieciseisavos) && updatedBracket.Dieciseisavos.length === 8 && updatedBracket.Dieciseisavos.every((m: any) => m && m.sh2 !== null && m.sh2 !== undefined);
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
-      hId: dieciseisavosWinners[i] ?? (isVueltaPlayed ? m.hId : null),
-      aId: 17 + i
+      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? m.hId) : null,
+      aId: isVueltaPlayed ? (17 + i) : null
     }));
   } else {
     updatedBracket.Octavos = Array(8).fill(0).map((_, i) => ({
       id: 'O' + (i + 1),
-      hId: dieciseisavosWinners[i] ?? null,
-      aId: 17 + i,
+      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? null) : null,
+      aId: isVueltaPlayed ? (17 + i) : null,
       sh: null,
       sa: null,
       sh2: null,
@@ -298,7 +471,7 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   let userTeamId = uelComp.userTeamId;
   let careerTeamName = uelComp.careerTeamName;
 
-  const userRepescado = realRepescados.find((r: any) => 
+  const userRepescado = safeRealRepescados.find((r: any) => 
     (c1Comp.careerTeamId && (r.originalId === c1Comp.careerTeamId || r.id === c1Comp.careerTeamId)) ||
     (c1Comp.userTeamId && (r.originalId === c1Comp.userTeamId || r.id === c1Comp.userTeamId)) ||
     (c1Comp.careerTeamName && r.name === c1Comp.careerTeamName) ||

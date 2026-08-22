@@ -125,7 +125,8 @@ export const buildUELKnockout = (compsState: any, forceNames: string[] = []) => 
   // 8 Repescados de Champions League (3.º de cada grupo de Champions)
   const c1 = compsState?.['C1'];
   const repescados: any[] = [];
-  const addedRepescaNames = new Set<string>();
+  const existingLeagueTeamNames = new Set(leagueTeams.map(t => t.name));
+  const addedRepescaNames = new Set<string>(existingLeagueTeamNames);
   const extracted = extractChampionsRepescados(c1);
 
   extracted.forEach(t => {
@@ -136,48 +137,49 @@ export const buildUELKnockout = (compsState: any, forceNames: string[] = []) => 
   });
 
   // Si Champions League aún no ha finalizado sus grupos, sembramos provisionalmente
-  // con los 7.ºs puestos reales de las 8 ligas europeas (clubes 100% auténticos de la base de datos).
+  // con los 7.ºs/8.ºs puestos reales de las 8 ligas europeas (clubes 100% auténticos de la base de datos),
+  // garantizando que ningún equipo clasificado por liga (IDs 1..16) se duplique como repescado.
   const provisionalCodes = ['ES', 'EN', 'IT', 'DE', 'FR', 'NL', 'MI', 'MB'];
   let provIdx = 0;
-  while (repescados.length < 8 && provIdx < provisionalCodes.length) {
-    const code = provisionalCodes[provIdx];
-    const cand = leagueTeamsByRank[code]?.[7] || (PRESETS[code] || [])[6] || (PRESETS[code] || [])[0];
+  while (repescados.length < 8 && provIdx < provisionalCodes.length * 4) {
+    const code = provisionalCodes[provIdx % provisionalCodes.length];
+    const offset = Math.floor(provIdx / provisionalCodes.length);
+    const presetsList = PRESETS[code] || [];
+    const cand = (offset === 0 ? leagueTeamsByRank[code]?.[7] : null) || 
+      presetsList.find(p => p && !addedRepescaNames.has(p.name));
+
     if (cand && cand.name && !addedRepescaNames.has(cand.name)) {
       addedRepescaNames.add(cand.name);
       const groupLetter = String.fromCharCode(65 + repescados.length);
+      const auth = getAuthenticTeamStats(cand);
       repescados.push({
         ...cand,
+        ...auth,
         id: 17 + repescados.length,
         isRepesca: true,
+        league: code,
         clOrigin: `Champions League (3.º Grupo ${groupLetter})`
       });
     }
     provIdx++;
   }
 
-  // Si hay equipos forzados (e.g. repescado del usuario tras quedar 3.º en Champions):
-  (forceNames || []).forEach((name: string) => {
-    if (!name) return;
-    const existingIndex = repescados.findIndex(r => r.name === name);
-    if (existingIndex === -1) {
-      let found: any = null;
-      Object.keys(compsState || {}).forEach(k => {
-        const comp = compsState[k];
-        if (!found && comp && Array.isArray(comp.teams)) {
-          const t = comp.teams.find((x: any) => x.name === name);
-          if (t) found = t;
-        }
-      });
-      if (found) {
-        repescados[0] = {
-          ...found,
-          id: 17,
-          isRepesca: true,
-          clOrigin: 'Champions League (3.º Repesca)'
-        };
-      }
-    }
-  });
+  // Respaldo de seguridad para garantizar 8 repescados únicos
+  while (repescados.length < 8) {
+    const fallbackPool = [...(PRESETS['ES'] || []), ...(PRESETS['EN'] || []), ...(PRESETS['IT'] || [])];
+    const cand = fallbackPool.find(p => p && !addedRepescaNames.has(p.name)) || {
+      name: `Club Europa ${repescados.length + 1}`,
+      att: 3, opp: 3, def: 3, color1: '#1e3a8a', color2: '#fbbf24'
+    };
+    addedRepescaNames.add(cand.name);
+    const groupLetter = String.fromCharCode(65 + repescados.length);
+    repescados.push({
+      ...cand,
+      id: 17 + repescados.length,
+      isRepesca: true,
+      clOrigin: `Champions League (3.º Grupo ${groupLetter})`
+    });
+  }
 
   const allTeams = [...leagueTeams, ...repescados].map(t => ({
     ...t,
@@ -196,11 +198,11 @@ export const buildUELKnockout = (compsState: any, forceNames: string[] = []) => 
     { id: 'D8', hId: 15, aId: 14, label: '5.º Miscelánea B vs 6.º Miscelánea A', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null }
   ];
 
-  // Octavos: Los 8 ganadores de Dieciseisavos se enfrentan a los 8 Repescados de Champions League
+  // Octavos: Los 8 ganadores de Dieciseisavos se enfrentan a los 8 Repescados de Champions League (Por definir hasta que se dispute 1/16)
   const octavosMatches = Array(8).fill(null).map((_, i) => ({
     id: 'O' + (i + 1),
     hId: null,
-    aId: 17 + i,
+    aId: null,
     sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null
   }));
 
@@ -541,11 +543,10 @@ export const getShuffleData = (compId: string, compsState: any) => {
         penA: null
       };
     });
-    const repIds = [17, 18, 19, 20, 21, 22, 23, 24].sort(() => Math.random() - 0.5);
     const shuffledO = Array(8).fill(null).map((_, i) => ({
       id: 'O' + (i + 1),
       hId: null,
-      aId: repIds[i],
+      aId: null,
       sh: null,
       sa: null,
       sh2: null,
