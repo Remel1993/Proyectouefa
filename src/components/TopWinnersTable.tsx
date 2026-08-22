@@ -2,7 +2,8 @@
 import { Star, Trophy } from "lucide-react";
 import { useMemo, useSyncExternalStore } from "react";
 import { getTopWinners, subscribeTitles, getPalmaresVersion, type WinnerRow } from "@/lib/palmares";
-import { getCountryCode } from "@/lib/countries";
+import { Shield } from "@/components/ui/GameUI";
+import { resolveTeamVisuals } from "@/lib/palmaresHelper";
 
 const useTitlesVersion = () =>
   useSyncExternalStore(
@@ -23,68 +24,6 @@ const Stars = ({ count }: { count: number }) => (
   </div>
 );
 
-/** Escudo/bandera compacto para la tabla de máximos ganadores. */
-const Crest = ({
-  name,
-  color1,
-  color2,
-  isFlag,
-}: {
-  name: string;
-  color1?: string | undefined;
-  color2?: string | undefined;
-  isFlag?: boolean | undefined;
-}) => {
-  const initial = name ? name[0] : "?";
-  if (isFlag) {
-    const code = getCountryCode(name);
-    if (code) {
-      return (
-        <div className="relative h-6 w-8 shrink-0 overflow-hidden rounded-sm border border-white/10 shadow-md">
-          <img
-            src={`https://flagcdn.com/${code}.svg`}
-            alt={name}
-            loading="lazy"
-            className="h-full w-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = "none";
-            }}
-          />
-        </div>
-      );
-    }
-    return (
-      <div className="relative h-8 w-7 shrink-0 overflow-hidden rounded-lg border border-white/10 shadow-md">
-        <div className="absolute inset-0 flex flex-col">
-          <div className="h-1/2 w-full" style={{ backgroundColor: color1 || "#333" }} />
-          <div className="h-1/2 w-full" style={{ backgroundColor: color2 || "#666" }} />
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-[10px] font-black italic text-white mix-blend-difference">
-            {initial}
-          </span>
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div
-      className="relative h-9 w-7 shrink-0 overflow-hidden shadow-md"
-      style={{ clipPath: "polygon(0% 0%, 100% 0%, 100% 80%, 50% 100%, 0% 80%)" }}
-    >
-      <div className="absolute inset-0 flex">
-        <div className="h-full w-1/2" style={{ backgroundColor: color1 || "#333" }} />
-        <div className="h-full w-1/2" style={{ backgroundColor: color2 || "#666" }} />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] font-black italic text-white mix-blend-difference">
-          {initial}
-        </span>
-      </div>
-    </div>
-  );
-};
-
 export interface LocalChampionRecord {
   season: number;
   champion: {
@@ -98,24 +37,34 @@ export interface LocalChampionRecord {
 /** Fusiona el registro global de títulos con el historial local de la competición. */
 const mergeRows = (base: WinnerRow[], records: LocalChampionRecord[]): WinnerRow[] => {
   const map = new Map<string, WinnerRow>();
-  base.forEach((r) => map.set(r.teamName, { ...r, seasons: [...r.seasons] }));
+  base.forEach((r) => {
+    const vis = resolveTeamVisuals(r.teamName, { color1: r.color1, color2: r.color2, isFlag: r.isFlag });
+    map.set(r.teamName, {
+      ...r,
+      color1: vis.color1,
+      color2: vis.color2,
+      isFlag: vis.isFlag,
+      seasons: [...r.seasons]
+    });
+  });
   records.forEach((rec) => {
     const c = rec?.champion;
     if (!c?.name) return;
+    const vis = resolveTeamVisuals(c.name, { color1: c.color1, color2: c.color2, isFlag: c.isFlag });
     const row = map.get(c.name) ?? {
       teamName: c.name,
       titles: 0,
-      color1: c.color1,
-      color2: c.color2,
-      isFlag: c.isFlag,
+      color1: vis.color1,
+      color2: vis.color2,
+      isFlag: vis.isFlag,
       seasons: [] as number[],
     };
     if (row.seasons.includes(rec.season)) return;
     row.titles += 1;
     row.seasons.push(rec.season);
-    if (!row.color1) row.color1 = c.color1;
-    if (!row.color2) row.color2 = c.color2;
-    if (row.isFlag === undefined) row.isFlag = c.isFlag;
+    if (!row.color1) row.color1 = vis.color1;
+    if (!row.color2) row.color2 = vis.color2;
+    if (row.isFlag === undefined) row.isFlag = vis.isFlag;
     map.set(c.name, row);
   });
   return [...map.values()].sort(
@@ -155,7 +104,9 @@ export const TopWinnersTable = ({
         <span className="text-[8px] font-black uppercase tracking-widest text-amber-300">
           #
         </span>
-        <span className="w-8 text-[8px] font-black uppercase tracking-widest text-amber-300" />
+        <span className="w-9 text-[8px] font-black uppercase tracking-widest text-amber-300 text-center">
+          Escudo
+        </span>
         <span className="text-[8px] font-black uppercase tracking-widest text-amber-300">
           Equipo
         </span>
@@ -164,33 +115,37 @@ export const TopWinnersTable = ({
         </span>
       </div>
       <div className="divide-y divide-white/5">
-        {rows.map((r, i) => (
-          <div
-            key={r.teamName}
-            className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5"
-          >
-            <span className="w-4 text-[10px] font-black italic text-slate-400">
-              {i + 1}
-            </span>
-            <div className="flex w-8 justify-center">
-              <Crest
-                name={r.teamName}
-                color1={r.color1}
-                color2={r.color2}
-                isFlag={r.isFlag}
-              />
+        {rows.map((r, i) => {
+          const vis = resolveTeamVisuals(r.teamName, { color1: r.color1, color2: r.color2, isFlag: r.isFlag });
+          return (
+            <div
+              key={`${r.teamName}-${i}`}
+              className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 hover:bg-white/5 transition-colors"
+            >
+              <span className="w-4 text-[10px] font-black italic text-slate-400">
+                {i + 1}
+              </span>
+              <div className="flex w-9 justify-center items-center shrink-0">
+                <Shield
+                  color1={vis.color1}
+                  color2={vis.color2}
+                  initial={vis.name}
+                  size="sm"
+                  isFlag={vis.isFlag}
+                />
+              </div>
+              <div className="min-w-0">
+                <p className="truncate text-[12px] font-black uppercase italic text-white">
+                  {r.teamName}
+                </p>
+                <Stars count={r.titles} />
+              </div>
+              <span className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/15 px-2 py-1 text-[10px] font-black text-amber-300">
+                <Trophy size={10} /> {r.titles}
+              </span>
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-[12px] font-black uppercase italic text-white">
-                {r.teamName}
-              </p>
-              <Stars count={r.titles} />
-            </div>
-            <span className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-400/30 bg-amber-500/15 px-2 py-1 text-[10px] font-black text-amber-300">
-              <Trophy size={10} /> {r.titles}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

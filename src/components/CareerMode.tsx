@@ -2907,7 +2907,7 @@ export const CareerView = ({
 
                       {marketVacancies?.length ? (
                         <div className='space-y-3.5'>
-                          {marketVacancies.map(v => {
+                          {marketVacancies.map((v, vIdx) => {
                             const isMyCurrentTeam = v.teamId === career.teamId && v.compId === career.compId && v.div === career.div;
                             const isThisApplied = career.activeApplication && career.activeApplication.teamId === v.teamId;
                             const isLocked = !!career.activeApplication && !isThisApplied;
@@ -2915,7 +2915,7 @@ export const CareerView = ({
 
                             return (
                               <div
-                                key={v.id}
+                                key={v.id ? `vac-${v.id}-${vIdx}` : `vac-${vIdx}`}
                                 className={`bg-gradient-to-br from-black/50 to-slate-900/70 rounded-2xl p-4 border transition-all space-y-3 ${
                                   isThisApplied ? 'border-sky-500/50 bg-sky-950/20' : isMyCurrentTeam ? 'border-emerald-500/40 bg-emerald-950/20' : 'border-white/10 hover:border-white/20'
                                 }`}
@@ -3068,13 +3068,13 @@ export const CareerView = ({
                         </div>
                       )}
 
-                      {allOffers.map(o => {
+                      {allOffers.map((o, oIdx) => {
                         const weeksLeft = o.weeksRemaining !== undefined && o.weeksRemaining !== null ? o.weeksRemaining : 2;
                         const isExpired = weeksLeft <= 0 || o.expired;
 
                         return (
                           <div
-                            key={o.id}
+                            key={o.id ? `offer-${o.id}-${oIdx}` : `offer-${oIdx}`}
                             className={`rounded-2xl p-4 border space-y-3 transition-all ${
                               isExpired
                                 ? 'bg-gradient-to-br from-rose-950/20 via-black/40 to-slate-900/60 border-rose-500/30 opacity-90'
@@ -3232,9 +3232,9 @@ export const CareerView = ({
                     <Mail size={13} /> Resoluciones de Candidatura
                   </p>
                   <div className='space-y-2.5'>
-                    {career.applicationHistory.map(res => (
+                    {career.applicationHistory.map((res, resIdx) => (
                       <div
-                        key={res.id}
+                        key={res.id ? `appres-${res.id}-${resIdx}` : `appres-${resIdx}`}
                         className={`rounded-2xl p-3.5 border space-y-1.5 ${
                           res.accepted
                             ? 'bg-emerald-950/30 border-emerald-500/30'
@@ -3608,9 +3608,9 @@ export const CareerSeasonReviewModal = ({ review, onAcceptOffer, onRenew, onStay
                 )}
               </div>
               <div className='space-y-2'>
-                {review.offers.map(o => (
+                {review.offers.map((o, oIdx) => (
                   <button
-                    key={o.id}
+                    key={o.id ? `renew-${o.id}-${oIdx}` : `renew-${oIdx}`}
                     onClick={() => setPendingOffer(o)}
                     className='w-full flex items-center gap-3 bg-black/40 hover:bg-amber-600/20 rounded-2xl p-3 border border-white/10 text-left active:scale-95 transition-all'
                   >

@@ -179,7 +179,7 @@ export const CareerHistoryArchiveModal: React.FC<CareerHistoryArchiveModalProps>
         {/* LISTADO DE CARRERAS */}
         <div className='flex-grow overflow-y-auto custom-scrollbar space-y-3.5 pr-1'>
           {filteredCareers.length > 0 ? (
-            filteredCareers.map(c => {
+            filteredCareers.map((c, idx) => {
               const band = repBand(c.reputation || 10);
               const isExpanded = expandedId === c.id;
               const hasTrophies = (c.trophies?.leagues || 0) > 0 || (c.trophies?.champions || 0) > 0 || (c.trophies?.promotions || 0) > 0;
@@ -187,7 +187,7 @@ export const CareerHistoryArchiveModal: React.FC<CareerHistoryArchiveModalProps>
 
               return (
                 <div
-                  key={c.id}
+                  key={c.id ? `carch-${c.id}-${idx}` : `carch-${idx}`}
                   className={`rounded-3xl border transition-all overflow-hidden ${
                     (c.trophies?.champions || 0) > 0
                       ? 'bg-gradient-to-br from-blue-950/40 via-slate-900/90 to-yellow-950/20 border-yellow-500/40 shadow-lg'
