@@ -2064,24 +2064,16 @@ export const CareerView = ({
                       Jornada de la Semana {careerCurrentWeek} Finalizada
                     </h3>
                     <p className='text-[10px] font-bold text-slate-300 mt-1 max-w-md mx-auto'>
-                      Has completado todos tus partidos oficiales asignados para esta fecha. Simula el resto de resultados o avanza al siguiente bloque del calendario.
+                      Has completado todos tus partidos oficiales asignados para esta fecha. Avanza al siguiente bloque del calendario para continuar la temporada.
                     </p>
                   </div>
-                  <div className='grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1'>
+                  <div className='pt-1 max-w-md mx-auto'>
                     <button
                       onClick={onSimulateMatch}
-                      className='bg-gradient-to-r from-emerald-500 via-teal-600 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 font-black cursor-pointer'
+                      className='w-full bg-gradient-to-r from-emerald-500 via-teal-600 to-green-600 hover:from-emerald-400 hover:to-green-500 text-slate-950 py-3.5 rounded-2xl text-[11px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer'
                     >
-                      <FastForward size={15} /> Avanzar a Semana {careerCurrentWeek + 1}
+                      <FastForward size={16} /> Avanzar a Semana {careerCurrentWeek + 1}
                     </button>
-                    {onNewSeason && (
-                      <button
-                        onClick={onNewSeason}
-                        className='bg-slate-800 hover:bg-slate-700 text-amber-300 py-3.5 rounded-2xl text-[10px] font-black uppercase italic tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-1.5 border border-amber-500/30 cursor-pointer'
-                      >
-                        <RotateCcw size={15} /> Cerrar e Iniciar Temporada {(seasonState?.season || 1) + 1}
-                      </button>
-                    )}
                   </div>
                 </Panel>
               ) : (

@@ -255,9 +255,20 @@ export const CareerUELHub: React.FC<CareerUELHubProps> = ({
       const isVuelta = matchday % 2 !== 0 && phase !== 'Final';
       const homeId = isVuelta ? match.aId : match.hId;
       const awayId = isVuelta ? match.hId : match.aId;
-      const homeTeam = safeUelComp.teams.find((t: any) => t.id === homeId) || { name: 'Por Definir', att: 3, opp: 3, def: 3 };
-      const awayTeam = safeUelComp.teams.find((t: any) => t.id === awayId) || { name: 'Por Definir', att: 3, opp: 3, def: 3 };
       const isHome = homeId === careerUelTeam.id;
+
+      const fallbackRival = (safeUelComp.teams || []).find((t: any) => t && t.id !== careerUelTeam.id) || {
+        id: 17,
+        name: 'Rival Europeo',
+        att: 3,
+        opp: 3,
+        def: 3,
+        color1: '#1e3a8a',
+        color2: '#f59e0b'
+      };
+
+      const homeTeam = safeUelComp.teams.find((t: any) => t && t.id === homeId) || (isHome ? careerUelTeam : fallbackRival);
+      const awayTeam = safeUelComp.teams.find((t: any) => t && t.id === awayId) || (!isHome ? careerUelTeam : fallbackRival);
       const rival = isHome ? awayTeam : homeTeam;
 
       let aggregate = null;

@@ -251,14 +251,47 @@ export const TrainingModal: React.FC<TrainingModalProps> = ({
               </div>
             </div>
 
+            {/* TABLA DE INFORMACIÓN Y PRECIOS DE PE */}
+            <div className="bg-black/40 rounded-2xl p-3.5 border border-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-black uppercase tracking-widest text-amber-400 flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-amber-400" /> Tabla Oficial de Precios de PE
+                </span>
+                <span className="text-[8px] font-bold text-slate-400">
+                  Límites: ATT (5) · OPP (5) · DEF (4)
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                <div className="bg-slate-950/60 rounded-xl p-2 border border-white/5 text-center">
+                  <span className="text-[8px] font-bold uppercase text-slate-400 block">Nivel 1 → 2</span>
+                  <span className="text-xs font-black italic text-emerald-400 tabular-nums">15 PE</span>
+                </div>
+                <div className="bg-slate-950/60 rounded-xl p-2 border border-white/5 text-center">
+                  <span className="text-[8px] font-bold uppercase text-slate-400 block">Nivel 2 → 3</span>
+                  <span className="text-xs font-black italic text-emerald-400 tabular-nums">35 PE</span>
+                </div>
+                <div className="bg-slate-950/60 rounded-xl p-2 border border-white/5 text-center">
+                  <span className="text-[8px] font-bold uppercase text-slate-400 block">Nivel 3 → 4</span>
+                  <span className="text-xs font-black italic text-emerald-400 tabular-nums">70 PE</span>
+                </div>
+                <div className="bg-slate-950/60 rounded-xl p-2 border border-white/5 text-center">
+                  <span className="text-[8px] font-bold uppercase text-slate-400 block">Nivel 4 → 5</span>
+                  <span className="text-xs font-black italic text-emerald-400 tabular-nums">120 PE</span>
+                </div>
+              </div>
+              <p className="text-[8px] font-bold text-slate-400 leading-tight pt-0.5">
+                Ganancias de PE: Victoria en partido oficial (+3 PE / +5 PE en Finales), Empate (+2 PE), Entrenamientos semanales 1D6 (+1 o +2 PE).
+              </p>
+            </div>
+
             {/* TABLA DE CONTROLES: BOTONES DE SUBIR Y BAJAR (+) Y (-) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between px-1">
                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-300">
                   Ajuste de Estadísticas (Máximo 5-5-4)
                 </span>
-                <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">
-                  Costos PE: 1→2 (15) · 2→3 (35) · 3→4 (70) · 4→5 (70)
+                <span className="text-[8px] font-bold uppercase tracking-wider text-emerald-300">
+                  Precios: 1→2 (15) · 2→3 (35) · 3→4 (70) · 4→5 (120)
                 </span>
               </div>
 
