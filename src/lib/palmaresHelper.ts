@@ -247,13 +247,23 @@ export const buildCupSeasonRecord = (comp: any, currentSeason: number, customWin
   let second = null;
   let finalMatchInfo: any = null;
 
-  if (final && final.sh !== null && final.sh !== undefined) {
-    const winId = (final.sh > final.sa) ? final.hId : (final.sa > final.sh) ? final.aId : (((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId);
-    const loseId = winId === final.hId ? final.aId : final.hId;
-    if (!champ) {
-      champ = t.find((x: any) => x.id === winId);
+  if (final && final.sh !== null && final.sh !== undefined && final.sa !== null && final.sa !== undefined) {
+    let winId = null;
+    if (final.sh > final.sa) {
+      winId = final.hId;
+    } else if (final.sa > final.sh) {
+      winId = final.aId;
+    } else if (final.penH !== null && final.penH !== undefined && final.penA !== null && final.penA !== undefined && final.penH !== final.penA) {
+      winId = final.penH > final.penA ? final.hId : final.aId;
     }
-    second = t.find((x: any) => x.id === loseId);
+
+    if (winId) {
+      const loseId = winId === final.hId ? final.aId : final.hId;
+      if (!champ) {
+        champ = t.find((x: any) => x.id === winId);
+      }
+      second = t.find((x: any) => x.id === loseId);
+    }
     const homeTeam = t.find((x: any) => x.id === final.hId);
     const awayTeam = t.find((x: any) => x.id === final.aId);
     finalMatchInfo = {
@@ -265,19 +275,26 @@ export const buildCupSeasonRecord = (comp: any, currentSeason: number, customWin
       penA: final.penA ?? null
     };
   }
-  if (!champ && t.length) {
-    champ = t[0];
-  }
   if (!champ) return null;
 
   let third = null;
   let fourth = null;
   let tpMatchInfo: any = null;
-  if (tp && tp.sh !== null && tp.sh !== undefined) {
-    const tpWinId = (tp.sh > tp.sa) ? tp.hId : (tp.sa > tp.sh) ? tp.aId : (((tp.penH || 0) > (tp.penA || 0)) ? tp.hId : tp.aId);
-    const tpLoseId = tpWinId === tp.hId ? tp.aId : tp.hId;
-    third = t.find((x: any) => x.id === tpWinId);
-    fourth = t.find((x: any) => x.id === tpLoseId);
+  if (tp && tp.sh !== null && tp.sh !== undefined && tp.sa !== null && tp.sa !== undefined) {
+    let tpWinId = null;
+    if (tp.sh > tp.sa) {
+      tpWinId = tp.hId;
+    } else if (tp.sa > tp.sh) {
+      tpWinId = tp.aId;
+    } else if (tp.penH !== null && tp.penH !== undefined && tp.penA !== null && tp.penA !== undefined && tp.penH !== tp.penA) {
+      tpWinId = tp.penH > tp.penA ? tp.hId : tp.aId;
+    }
+
+    if (tpWinId) {
+      const tpLoseId = tpWinId === tp.hId ? tp.aId : tp.hId;
+      third = t.find((x: any) => x.id === tpWinId);
+      fourth = t.find((x: any) => x.id === tpLoseId);
+    }
     const homeTeam = t.find((x: any) => x.id === tp.hId);
     const awayTeam = t.find((x: any) => x.id === tp.aId);
     tpMatchInfo = {

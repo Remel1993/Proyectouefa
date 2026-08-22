@@ -149,7 +149,6 @@ export const sanitizeChampionsBracket = (
           // Si el partido de esta fase AÚN NO HA CONCLUIDO, vaciar inmediatamente el cupo en la fase siguiente
           if (p === 'Dieciseisavos' && newBracket.Octavos?.[mIdx]) {
             newBracket.Octavos[mIdx].hId = null;
-            newBracket.Octavos[mIdx].aId = null;
           } else if (p === 'Octavos' && newBracket.Cuartos) {
             const cIdx = Math.floor(mIdx / 2);
             const isH = mIdx % 2 === 0;
@@ -177,10 +176,45 @@ export const sanitizeChampionsBracket = (
         const totH = isTwoLegged ? ((m.sh || 0) + (m.sh2 || 0)) : (m.sh || 0);
         const totA = isTwoLegged ? ((m.sa || 0) + (m.sa2 || 0)) : (m.sa || 0);
         let winner: number | null = null;
-        if (totH > totA) winner = m.hId;
-        else if (totA > totH) winner = m.aId;
-        else if (m.penH !== null && m.penH !== undefined) winner = m.penH > m.penA ? m.hId : m.aId;
-        else winner = m.hId; // Fallback
+        if (totH > totA) {
+          winner = m.hId;
+        } else if (totA > totH) {
+          winner = m.aId;
+        } else if (m.penH !== null && m.penH !== undefined && m.penA !== null && m.penA !== undefined && m.penH !== m.penA) {
+          winner = m.penH > m.penA ? m.hId : m.aId;
+        } else {
+          // Si hay empate en el global y no se ha resuelto la tanda de penaltis (o están empatados sin ganador),
+          // la eliminatoria NO ha concluido válidamente. NO propagar ningún equipo a la siguiente ronda.
+          winner = null;
+        }
+
+        // Si la eliminatoria no tiene un ganador definitivo resuelto, limpiar la plaza en la fase posterior
+        if (!winner) {
+          if (p === 'Dieciseisavos' && newBracket.Octavos?.[mIdx]) {
+            newBracket.Octavos[mIdx].hId = null;
+          } else if (p === 'Octavos' && newBracket.Cuartos) {
+            const cIdx = Math.floor(mIdx / 2);
+            const isH = mIdx % 2 === 0;
+            if (newBracket.Cuartos[cIdx]) {
+              if (isH) newBracket.Cuartos[cIdx].hId = null;
+              else newBracket.Cuartos[cIdx].aId = null;
+            }
+          } else if (p === 'Cuartos' && newBracket.Semis) {
+            const sIdx = Math.floor(mIdx / 2);
+            const isH = mIdx % 2 === 0;
+            if (newBracket.Semis[sIdx]) {
+              if (isH) newBracket.Semis[sIdx].hId = null;
+              else newBracket.Semis[sIdx].aId = null;
+            }
+          } else if (p === 'Semis' && newBracket.Final) {
+            const finalMatch = Array.isArray(newBracket.Final) ? newBracket.Final[0] : newBracket.Final;
+            if (finalMatch) {
+              if (mIdx === 0) finalMatch.hId = null;
+              if (mIdx === 1) finalMatch.aId = null;
+            }
+          }
+          return;
+        }
 
         const loser = winner === m.hId ? m.aId : m.hId;
 
@@ -449,36 +483,38 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   // Actualizar el bracket de Octavos para que 'aId' apunte fielmente a los IDs 17..24
   const updatedBracket = { ...(uelComp.bracket || {}) };
   
-  // Verificar si Dieciseisavos ya se disputó para poblar hId con los clasificados y aId con los repescados
+  // Verificar los ganadores de Dieciseisavos (únicamente para eliminatorias concluidas con vuelta jugada)
   let dieciseisavosWinners: (number | null)[] = Array(8).fill(null);
-  let isVueltaPlayed = false;
   if (Array.isArray(updatedBracket.Dieciseisavos) && updatedBracket.Dieciseisavos.length === 8) {
-    isVueltaPlayed = updatedBracket.Dieciseisavos.every((m: any) => m && m.sh2 !== null && m.sh2 !== undefined);
-    if (isVueltaPlayed) {
-      dieciseisavosWinners = updatedBracket.Dieciseisavos.map((m: any) => {
-        // En la ida: m.sh (goles de m.hId), m.sa (goles de m.aId)
-        // En la vuelta: m.sh2 (goles de m.hId), m.sa2 (goles de m.aId)
-        const totH = (m.sh || 0) + (m.sh2 || 0);
-        const totA = (m.sa || 0) + (m.sa2 || 0);
-        if (totH > totA) return m.hId;
-        if (totA > totH) return m.aId;
-        return (m.penH || 0) > (m.penA || 0) ? m.hId : m.aId;
-      });
-    }
+    dieciseisavosWinners = updatedBracket.Dieciseisavos.map((m: any) => {
+      if (!m || m.sh === null || m.sh === undefined || m.sh2 === null || m.sh2 === undefined) {
+        return null;
+      }
+      // En la ida: m.sh (goles de m.hId), m.sa (goles de m.aId)
+      // En la vuelta: m.sh2 (goles de m.hId), m.sa2 (goles de m.aId)
+      const totH = (m.sh || 0) + (m.sh2 || 0);
+      const totA = (m.sa || 0) + (m.sa2 || 0);
+      if (totH > totA) return m.hId;
+      if (totA > totH) return m.aId;
+      if (m.penH !== null && m.penH !== undefined && m.penA !== null && m.penA !== undefined && m.penH !== m.penA) {
+        return m.penH > m.penA ? m.hId : m.aId;
+      }
+      return null;
+    });
   }
 
   // Inyectar los repescados en aId de Octavos.
-  // hId se completará con los ganadores de Dieciseisavos si ya se jugaron, o se mantendrá con un ID válido.
+  // hId se completará con el ganador de Dieciseisavos ÚNICAMENTE si ya se jugó y concluyó. De lo contrario debe ser null.
   if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
-      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? m.hId ?? (i + 1)) : (m.hId ?? (i + 1)),
+      hId: dieciseisavosWinners[i] ?? null,
       aId: 17 + i
     }));
   } else {
     updatedBracket.Octavos = Array(8).fill(0).map((_, i) => ({
       id: 'O' + (i + 1),
-      hId: isVueltaPlayed ? (dieciseisavosWinners[i] ?? (i + 1)) : (i + 1),
+      hId: dieciseisavosWinners[i] ?? null,
       aId: 17 + i,
       sh: null,
       sa: null,

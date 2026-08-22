@@ -198,12 +198,13 @@ export const buildUELKnockout = (compsState: any, forceNames: string[] = []) => 
     { id: 'D8', hId: 15, aId: 14, label: '5.º Miscelánea B vs 6.º Miscelánea A', sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null }
   ];
 
-  const isC1Done = !c1 || c1.phase !== 'groups' || (c1.matchday || 0) >= 6;
+  const isC1Done = Boolean(c1 && (c1.phase !== 'groups' || (c1.matchday || 0) >= 6) && repescados.length >= 8);
   // Octavos: Los 8 ganadores de Dieciseisavos se enfrentan a los 8 Repescados de Champions League
+  // Permanecen estrictamente en null (Por Definir) hasta que se disputen y concluyan las fases correspondientes
   const octavosMatches = Array(8).fill(null).map((_, i) => ({
     id: 'O' + (i + 1),
     hId: null,
-    aId: (isC1Done && repescados.length >= 8) ? (17 + i) : null,
+    aId: isC1Done ? (17 + i) : null,
     sh: null, sa: null, sh2: null, sa2: null, penH: null, penA: null
   }));
 
