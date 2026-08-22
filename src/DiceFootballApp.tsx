@@ -9,7 +9,7 @@ import {
   ArrowDownRight, CheckCircle2, ChevronDown, Flag, Users,
   Megaphone, ArrowUpCircle, ArrowDownCircle, Wand2
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'motion/react';
 
 import { playClick } from '@/lib/audio';
 import { 
@@ -1982,6 +1982,7 @@ function DiceFootballApp() {
     const weekData = getSemanaCalendario(currentWk);
     const hasChampions = weekData?.fixtures?.some(f => f.competicion === 'CHAMPIONS' && f.esPartido);
     const hasEuropa = weekData?.fixtures?.some(f => f.competicion === 'EUROPA_LEAGUE' && f.esPartido);
+    const hasLeague = weekData?.fixtures?.some(f => f.competicion === 'LIGA' && f.esPartido);
 
     const isCareerAliveInC1 = Boolean(careerClInfo?.alive && !careerClInfo?.champion && !comps['C1']?.showWinner && comps['C1']?.phase !== 'Terminado');
     const isCareerAliveInC3 = Boolean(careerUelInfo?.alive && !careerUelInfo?.champion && !comps['C3']?.showWinner && comps['C3']?.phase !== 'Terminado');
@@ -2022,8 +2023,8 @@ function DiceFootballApp() {
     const userPendingClThisWeek = hasChampions && isCareerAliveInC1 && ((comps['C1']?.matchday || 0) < (getExpectedCupMatchdayForWeek('C1', currentWk) ?? 99));
     const userPendingUelThisWeek = hasEuropa && isCareerAliveInC3 && ((comps['C3']?.matchday || 0) < (getExpectedCupMatchdayForWeek('C3', currentWk) ?? 99));
 
-    // Solo avanzar la semana si no hay un compromiso europeo pendiente para el mánager en esta misma semana
-    if (advanceSeasonWeek && !userPendingClThisWeek && !userPendingUelThisWeek) {
+    // Solo avanzar la semana si no hay un compromiso europeo pendiente para el mánager en esta misma semana y no se avanzó por sincronización de ligas
+    if (advanceSeasonWeek && !userPendingClThisWeek && !userPendingUelThisWeek && (!hasLeague || allLeaguesFinished)) {
       setSeasonState(s => ({
         ...s,
         currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
@@ -2742,11 +2743,13 @@ function DiceFootballApp() {
       return;
     }
 
-    // 4. Incrementar la semana de la temporada
-    setSeasonState(s => ({
-      ...s,
-      currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
-    }));
+    // 4. Incrementar la semana de la temporada solo si no hubo partidos de liga en esta semana (los partidos de liga actualizan el reloj global automáticamente mediante el efecto de sincronización)
+    if (!hasLeague || allLeaguesFinished) {
+      setSeasonState(s => ({
+        ...s,
+        currentWeek: Math.min(43, (s.currentWeek || 1) + 1)
+      }));
+    }
   };
 
   const simulateUntilNextMatch = () => {
@@ -4232,7 +4235,10 @@ function DiceFootballApp() {
           const tA = isChampions && phase !== 'Final' ? ((m.sa || 0) + (m.sa2 || 0)) : (m.sa || 0);
           if (tH > tA) return m.hId;
           if (tA > tH) return m.aId;
-          return (m.penH || 0) > (m.penA || 0) ? m.hId : m.aId;
+          if (m.penH !== null && m.penH !== undefined && m.penA !== null && m.penA !== undefined && m.penH !== m.penA) {
+            return m.penH > m.penA ? m.hId : m.aId;
+          }
+          return null;
         });
 
         if (phase === 'Dieciseisavos') {
@@ -4240,7 +4246,7 @@ function DiceFootballApp() {
           const repescadoTeams = (comp.teams || []).filter((t: any) => t.isRepesca || (t.clOrigin && t.clOrigin.includes('Repesca')));
           newBracket.Octavos = Array(8).fill(0).map((_, i) => ({
             id: 'O' + (i + 1),
-            hId: winners[i] ?? (comp.teams?.[i]?.id ?? (i + 1)),
+            hId: winners[i] ?? null,
             aId: repescadoTeams[i]?.id ?? (17 + i),
             sh: null, sa: null, penH: null, penA: null, sh2: null, sa2: null
           }));
@@ -4606,7 +4612,7 @@ function DiceFootballApp() {
       }
       if (isUelWinner && careerTeam) {
         registerTitle({
-          compId: 'C2',
+          compId: 'C3',
           compName: 'UEFA Europa League',
           type: 'cup',
           div: 1,
