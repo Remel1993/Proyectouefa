@@ -227,8 +227,8 @@ export const generateNews = (teams: any[], teams2: any[], matchday: number, comp
   // === FACTOR DADO / SUERTE ===
   if (matchday >= 2) {
     // Equipos con att bajo pero muchos goles (suerte en los dados)
-    const luckyTeams = sorted.filter(t => !usedIds.has(t.id) && (t.att || 3) <= 3 && (t.gf || 0) > matchday * 1.3);
-    const unluckyTeams = sorted.filter(t => !usedIds.has(t.id) && (t.att || 3) >= 4 && matchday > 0 && (t.gf || 0) < matchday * 0.7);
+    const luckyTeams = sorted.filter(t => t && !usedIds.has(t.id) && (t.att || 3) <= 3 && (t.gf || 0) > matchday * 1.3);
+    const unluckyTeams = sorted.filter(t => t && !usedIds.has(t.id) && (t.att || 3) >= 4 && matchday > 0 && (t.gf || 0) < matchday * 0.7);
 
     if (luckyTeams.length > 0) {
       const lucky = pick(luckyTeams);
@@ -405,7 +405,7 @@ export const generateNews = (teams: any[], teams2: any[], matchday: number, comp
   }
 
   // === ATAQUE LETAL (ATT >= 5) ===
-  const offensiveBeasts = teams.filter(t => t.att >= 5 && !usedIds.has(t.id));
+  const offensiveBeasts = teams.filter(t => t && (t.att || 0) >= 5 && !usedIds.has(t.id));
   if (offensiveBeasts.length > 0) {
     const beast = pick(offensiveBeasts);
     const gpm = matchday > 0 ? ((beast.gf || 0) / matchday).toFixed(1) : '0';
@@ -416,7 +416,7 @@ export const generateNews = (teams: any[], teams2: any[], matchday: number, comp
   }
 
   // === MURO DEFENSIVO (DEF >= 5) ===
-  const walls = teams.filter(t => t.def >= 5 && !usedIds.has(t.id));
+  const walls = teams.filter(t => t && (t.def || 0) >= 5 && !usedIds.has(t.id));
   if (walls.length > 0) {
     const wall = pick(walls);
     const gapm = matchday > 0 ? ((wall.ga || 0) / matchday).toFixed(1) : '0';
@@ -519,7 +519,7 @@ export const generateNews = (teams: any[], teams2: any[], matchday: number, comp
   // === FRASES PICANTES / PROVOCADORAS (aleatoriamente) ===
   if (matchday >= 3 && Math.random() > 0.6) {
     // Equipo grande en posición baja
-    const bigTeams = sorted.filter(t => (t.att >= 4 && t.opp >= 4) || t.att >= 5);
+    const bigTeams = sorted.filter(t => t && (((t.att || 0) >= 4 && (t.opp || 0) >= 4) || (t.att || 0) >= 5));
     const bigTeamLow = bigTeams.find(t => {
       const pos = sorted.indexOf(t) + 1;
       return pos > totalTeams * 0.5 && !usedIds.has(t.id);
@@ -527,7 +527,7 @@ export const generateNews = (teams: any[], teams2: any[], matchday: number, comp
 
     // Equipo modesto arriba
     const modestTeamHigh = sorted.slice(0, Math.max(3, Math.floor(totalTeams * 0.2))).find(t =>
-      (t.att <= 3 && t.def <= 3) && !usedIds.has(t.id)
+      t && ((t.att || 0) <= 3 && (t.def || 0) <= 3) && !usedIds.has(t.id)
     );
 
     if (bigTeamLow && modestTeamHigh) {
@@ -629,7 +629,7 @@ export const generateNews = (teams: any[], teams2: any[], matchday: number, comp
     }
 
     // --- GRANDE EN PELIGRO (según la forma reciente real) ---
-    const bigTeamsInCup = sorted.filter(t => !usedIds.has(t.id) && (t.att >= 4 || t.opp >= 4));
+    const bigTeamsInCup = sorted.filter(t => t && !usedIds.has(t.id) && ((t.att || 0) >= 4 || (t.opp || 0) >= 4));
     const struggling = bigTeamsInCup.filter(t => {
       const st = getStreak(t.id);
       return st.type === 'L' || (st.type === 'D' && st.count >= 2);
