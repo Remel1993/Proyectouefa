@@ -61,6 +61,17 @@ export const sanitizeChampionsBracket = (
     newBracket[p] = newBracket[p].map((m: any, mIdx: number) => {
       if (!m) return m;
 
+      // Determinar el equipo que avanzó a la siguiente ronda
+      let advancedTeamId: number | null = null;
+      if (p === 'Dieciseisavos') {
+        advancedTeamId = nextRound[mIdx]?.hId ?? null;
+      } else {
+        const pairIdx = Math.floor(mIdx / 2);
+        const isHomeInNext = mIdx % 2 === 0;
+        const targetNext = nextRound[pairIdx];
+        advancedTeamId = targetNext ? (isHomeInNext ? targetNext.hId : targetNext.aId) : null;
+      }
+
       // Si tiene ida registrada pero la vuelta quedó null y ya se avanzó a la siguiente ronda
       if (
         m.sh !== null &&
@@ -68,11 +79,6 @@ export const sanitizeChampionsBracket = (
         (m.sh2 === null || m.sh2 === undefined) &&
         hasAdvancedTeams
       ) {
-        const pairIdx = Math.floor(mIdx / 2);
-        const isHomeInNext = mIdx % 2 === 0;
-        const targetNext = nextRound[pairIdx];
-        const advancedTeamId = targetNext ? (isHomeInNext ? targetNext.hId : targetNext.aId) : null;
-
         const h = teams.find((t: any) => t.id === m.hId);
         const a = teams.find((t: any) => t.id === m.aId);
 
@@ -114,6 +120,68 @@ export const sanitizeChampionsBracket = (
       }
       return m;
     });
+
+    // Validar y limpiar llaves posteriores para que ningún equipo eliminado aparezca en fases siguientes
+    if (Array.isArray(newBracket[p])) {
+      newBracket[p].forEach((m: any, mIdx: number) => {
+        if (!m) return;
+        const isTwoLegged = p !== 'Final';
+        const isMatchConcluded = isTwoLegged
+          ? (m.sh !== null && m.sh !== undefined && m.sh2 !== null && m.sh2 !== undefined)
+          : (m.sh !== null && m.sh !== undefined);
+
+        if (!isMatchConcluded) return;
+
+        const totH = isTwoLegged ? ((m.sh || 0) + (m.sh2 || 0)) : (m.sh || 0);
+        const totA = isTwoLegged ? ((m.sa || 0) + (m.sa2 || 0)) : (m.sa || 0);
+        let winner: number | null = null;
+        if (totH > totA) winner = m.hId;
+        else if (totA > totH) winner = m.aId;
+        else if (m.penH !== null && m.penH !== undefined) winner = m.penH > m.penA ? m.hId : m.aId;
+        else winner = m.hId; // Fallback
+
+        const loser = winner === m.hId ? m.aId : m.hId;
+
+        // Propagar el ganador a la fase inmediatamente posterior
+        if (p === 'Dieciseisavos' && newBracket.Octavos?.[mIdx]) {
+          newBracket.Octavos[mIdx].hId = winner;
+        } else if (p === 'Octavos' && newBracket.Cuartos) {
+          const cIdx = Math.floor(mIdx / 2);
+          const isH = mIdx % 2 === 0;
+          if (newBracket.Cuartos[cIdx]) {
+            if (isH) newBracket.Cuartos[cIdx].hId = winner;
+            else newBracket.Cuartos[cIdx].aId = winner;
+          }
+        } else if (p === 'Cuartos' && newBracket.Semis) {
+          const sIdx = Math.floor(mIdx / 2);
+          const isH = mIdx % 2 === 0;
+          if (newBracket.Semis[sIdx]) {
+            if (isH) newBracket.Semis[sIdx].hId = winner;
+            else newBracket.Semis[sIdx].aId = winner;
+          }
+        } else if (p === 'Semis' && newBracket.Final) {
+          const finalMatch = Array.isArray(newBracket.Final) ? newBracket.Final[0] : newBracket.Final;
+          if (finalMatch) {
+            if (mIdx === 0) finalMatch.hId = winner;
+            if (mIdx === 1) finalMatch.aId = winner;
+          }
+        }
+
+        // Limpieza estricta: asegurar que el equipo perdedor no aparezca en ninguna llave de fases posteriores
+        if (loser !== null && loser !== undefined) {
+          const subsequentPhases = phases.slice(pIdx + 1).concat('Final');
+          subsequentPhases.forEach(sp => {
+            const spMatches = Array.isArray(newBracket[sp]) ? newBracket[sp] : (newBracket[sp] ? [newBracket[sp]] : []);
+            spMatches.forEach((sm: any) => {
+              if (sm) {
+                if (sm.hId === loser) sm.hId = null;
+                if (sm.aId === loser) sm.aId = null;
+              }
+            });
+          });
+        }
+      });
+    }
   });
 
   return newBracket;
@@ -205,9 +273,10 @@ export const syncChampionsRepescadosToUEL = (c1Comp: any, uelComp: any): any => 
   }
 
   if (Array.isArray(updatedBracket.Octavos) && updatedBracket.Octavos.length === 8) {
+    const isVueltaPlayed = Array.isArray(updatedBracket.Dieciseisavos) && updatedBracket.Dieciseisavos.length === 8 && updatedBracket.Dieciseisavos.every((m: any) => m && m.sh2 !== null && m.sh2 !== undefined);
     updatedBracket.Octavos = updatedBracket.Octavos.map((m: any, i: number) => ({
       ...m,
-      hId: dieciseisavosWinners[i] ?? m.hId ?? null,
+      hId: dieciseisavosWinners[i] ?? (isVueltaPlayed ? m.hId : null),
       aId: 17 + i
     }));
   } else {
