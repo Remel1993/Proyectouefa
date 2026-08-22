@@ -27,7 +27,7 @@ import {
 } from '@/lib/knockoutEngine';
 import { 
   ChampionRecord, leaderBy, buildSeasonRecord, buildCupSeasonRecord, 
-  pushRecord, registerSeasonSummary 
+  pushRecord, registerSeasonSummary, sanitizeArchive 
 } from '@/lib/palmaresHelper';
 import { generateNews, WC_POPULAR_SUGGESTIONS } from '@/lib/newsGenerator';
 import { 
@@ -104,7 +104,20 @@ function DiceFootballApp() {
   }, [view, compView]);
 
   const [archive, setArchive] = useState(() => {
-    try { const saved = window.localStorage.getItem(`${APP_ID}_archive`); if (saved) return JSON.parse(saved); } catch (e) {} return [];
+    try {
+      const saved = window.localStorage.getItem(`${APP_ID}_archive`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const mapped = parsed.map((e, idx) => ({
+            ...e,
+            id: typeof e.id === 'string' && e.id.startsWith('arch_') ? e.id : `arch_${e.compId || 'c'}_${e.div || 1}_s${e.season || 1}_${idx}_${Date.now()}`
+          }));
+          return sanitizeArchive(mapped);
+        }
+      }
+    } catch (e) {}
+    return [];
   });
   useEffect(() => { try { window.localStorage.setItem(`${APP_ID}_archive`, JSON.stringify(archive)); } catch(e){} }, [archive]);
 
@@ -268,6 +281,16 @@ function DiceFootballApp() {
           season: sh.season || 1
         });
       }
+      if (sh.isUelChampion || (sh.uelResult && sh.uelResult.includes('Campeón'))) {
+        recoverableTitles.push({
+          compId: 'C3',
+          compName: 'UEFA Europa League',
+          type: 'cup',
+          div: 1,
+          winner: { name: sh.teamName },
+          season: sh.season || 1
+        });
+      }
     });
 
     registerTitles(recoverableTitles);
@@ -319,28 +342,28 @@ function DiceFootballApp() {
       if (!c) return;
       const r1 = buildSeasonRecord(c.teams, seasonNow);
       const r2 = buildSeasonRecord(c.teams2, seasonNow);
-      if (r1) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
-      if (r2) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
+      if (r1) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, runnerUp: r1.runnerUp, thirdPlace: r1.thirdPlace, records: r1.records, season: seasonNow });
+      if (r2) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, runnerUp: r2.runnerUp, thirdPlace: r2.thirdPlace, records: r2.records, season: seasonNow });
     });
     const c1 = comps['C1'];
     if (c1) {
       const clRecord = buildCupSeasonRecord(c1, seasonNow);
       if (clRecord?.champion) {
-        seasonTitles.push({ compId: 'C1', compName: c1.name || 'Champions League', type: 'cup', div: 1, winner: clRecord.champion, season: seasonNow });
+        seasonTitles.push({ compId: 'C1', compName: c1.name || 'Champions League', type: 'cup', div: 1, winner: clRecord.champion, runnerUp: clRecord.runnerUp, thirdPlace: clRecord.thirdPlace, finalMatch: clRecord.finalMatch, records: clRecord.records, season: seasonNow });
       }
     }
     const c2 = comps['C2'];
     if (c2) {
       const wcRecord = buildCupSeasonRecord(c2, seasonNow);
       if (wcRecord?.champion) {
-        seasonTitles.push({ compId: 'C2', compName: c2.name || 'Copa del Mundo', type: 'cup', div: 1, winner: wcRecord.champion, season: seasonNow });
+        seasonTitles.push({ compId: 'C2', compName: c2.name || 'Copa del Mundo', type: 'cup', div: 1, winner: wcRecord.champion, runnerUp: wcRecord.runnerUp, thirdPlace: wcRecord.thirdPlace, finalMatch: wcRecord.finalMatch, records: wcRecord.records, season: seasonNow });
       }
     }
     const c3 = comps['C3'];
     if (c3) {
       const uelRecord = buildCupSeasonRecord(c3, seasonNow);
       if (uelRecord?.champion) {
-        seasonTitles.push({ compId: 'C3', compName: c3.name || 'UEFA Europa League', type: 'cup', div: 1, winner: uelRecord.champion, season: seasonNow });
+        seasonTitles.push({ compId: 'C3', compName: c3.name || 'UEFA Europa League', type: 'cup', div: 1, winner: uelRecord.champion, runnerUp: uelRecord.runnerUp, thirdPlace: uelRecord.thirdPlace, finalMatch: uelRecord.finalMatch, records: uelRecord.records, season: seasonNow });
       }
     }
     registerTitles(seasonTitles);
@@ -484,6 +507,7 @@ function DiceFootballApp() {
       }
 
       // 3. Generar la nueva Champions League (C1) TOMADA EXCLUSIVAMENTE de la temporada finalizada
+      const clPrevHist = prev['C1']?.championsHistory || [];
       const clNew = getAutoFillData('C1', finishedLeaguesState, careerQualifiedCLName ? [careerQualifiedCLName] : []);
       if (clNew) {
         const mine = careerQualifiedCLName ? (clNew.teams || []).find((t: any) => t.name === careerQualifiedCLName) : null;
@@ -500,14 +524,16 @@ function DiceFootballApp() {
           sourceSeason: seasonNow,
           careerTeamName: careerQualifiedCLName || null,
           careerTeamId: mine?.id || null,
-          userTeamId: mine?.id || clNew.userTeamId
+          userTeamId: mine?.id || clNew.userTeamId,
+          championsHistory: clPrevHist
         };
       } else {
         const defaults = getDefaultComps();
-        next['C1'] = { ...defaults['C1'], season: seasonNow + 1, sourceSeason: seasonNow };
+        next['C1'] = { ...defaults['C1'], season: seasonNow + 1, sourceSeason: seasonNow, championsHistory: clPrevHist };
       }
 
       // 4. Generar la nueva UEFA Europa League (C3) TOMADA EXCLUSIVAMENTE de la misma temporada finalizada
+      const uelPrevHist = prev['C3']?.championsHistory || [];
       const uelNew = getAutoFillData('C3', finishedLeaguesState, careerQualifiedUELName ? [careerQualifiedUELName] : []);
       if (uelNew) {
         const mine = careerQualifiedUELName ? (uelNew.teams || []).find((t: any) => t.name === careerQualifiedUELName) : null;
@@ -524,7 +550,8 @@ function DiceFootballApp() {
           sourceSeason: seasonNow,
           careerTeamName: careerQualifiedUELName || null,
           careerTeamId: mine?.id || null,
-          userTeamId: mine?.id || uelNew.userTeamId
+          userTeamId: mine?.id || uelNew.userTeamId,
+          championsHistory: uelPrevHist
         };
       }
 
@@ -533,8 +560,14 @@ function DiceFootballApp() {
         const c = finishedLeaguesState[id];
         const r1 = buildSeasonRecord(c.teams, seasonNow);
         const r2 = buildSeasonRecord(c.teams2, seasonNow);
-        if (r1) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
-        if (r2) seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
+        if (r1) {
+          seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 1, winner: r1.champion, season: seasonNow });
+          archiveCompetition(id, 1, r1.champion, c);
+        }
+        if (r2) {
+          seasonTitles.push({ compId: id, compName: c.name, type: 'league', div: 2, winner: r2.champion, season: seasonNow });
+          archiveCompetition(id, 2, r2.champion, c);
+        }
         
         const ns = computeLeagueNewSeason(c) || {};
         const prevSnapshot = buildStandingsSnapshot(c.teams);
@@ -650,24 +683,43 @@ function DiceFootballApp() {
     }
 
     const currentSeasonNum = seasonState?.season || 1;
+    const uniqueArchId = `arch_${compId}_${div}_s${currentSeasonNum}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const entry = { 
-      id: Date.now(), compId, name: comp.name, date: new Date().toLocaleDateString(), div, winner, 
+      id: uniqueArchId, compId, name: comp.name, date: new Date().toLocaleDateString(), div, winner, 
       teams: t, history: isDiv2 ? comp.history2 : comp.history, bracket: comp.bracket, groups: comp.groups, type: comp.type,
       season: currentSeasonNum
     };
-    setArchive(prev => [entry, ...(prev || []).filter(e => !(e.compId === compId && e.div === div && e.season === currentSeasonNum))].slice(0, 20));
+    setArchive(prev => sanitizeArchive([entry, ...(prev || []).filter(e => !(e.compId === compId && (e.div || 1) === (div || 1)))]));
     if (winner) {
+      const activeRecord = comp.type === 'league' 
+        ? buildSeasonRecord(t, currentSeasonNum) 
+        : buildCupSeasonRecord(comp, currentSeasonNum, winner);
+
       registerTitle({
-        compId, compName: comp.name, type: comp.type === 'league' ? 'league' : 'cup',
-        div, winner: {
+        compId, 
+        compName: comp.name, 
+        type: comp.type === 'league' ? 'league' : 'cup',
+        div, 
+        winner: {
           name: winner.name,
           color1: winner.color1,
           color2: winner.color2,
-          isFlag: winner.isFlag
-        }, season: currentSeasonNum
+          isFlag: winner.isFlag,
+          pts: winner.pts,
+          gf: winner.gf,
+          ga: winner.ga,
+          w: winner.w,
+          d: winner.d,
+          l: winner.l
+        }, 
+        runnerUp: activeRecord?.runnerUp || null,
+        thirdPlace: activeRecord?.thirdPlace || null,
+        finalMatch: activeRecord?.finalMatch || null,
+        records: activeRecord?.records,
+        season: currentSeasonNum
       });
       if (comp.type !== 'league') {
-        const cupRecord = buildCupSeasonRecord(comp, currentSeasonNum);
+        const cupRecord = activeRecord || buildCupSeasonRecord(comp, currentSeasonNum, winner);
         if (cupRecord) {
           setComps(prev => {
             const current = prev[compId];
@@ -677,6 +729,21 @@ function DiceFootballApp() {
               [compId]: {
                 ...current,
                 championsHistory: pushRecord(cupRecord, current.championsHistory)
+              }
+            };
+          });
+        }
+      } else {
+        const legRecord = activeRecord || buildSeasonRecord(t, currentSeasonNum);
+        if (legRecord) {
+          setComps(prev => {
+            const current = prev[compId];
+            if (!current) return prev;
+            return {
+              ...prev,
+              [compId]: {
+                ...current,
+                [isDiv2 ? 'championsHistory2' : 'championsHistory']: pushRecord(legRecord, current[isDiv2 ? 'championsHistory2' : 'championsHistory'])
               }
             };
           });
@@ -2138,12 +2205,32 @@ function DiceFootballApp() {
         // Asegurar conclusión de Champions si no ha finalizado
         let c1 = next['C1'];
         if (c1 && c1.teams && c1.teams.length > 0 && !c1.showWinner && c1.phase !== 'Terminado') {
-          next['C1'] = simulateEntireCupToFinish(c1);
+          const finishedC1 = simulateEntireCupToFinish(c1, 'C1');
+          if (finishedC1.showWinner || finishedC1.phase === 'Terminado') {
+            const final = finishedC1.bracket?.Final?.[0] || finishedC1.bracket?.Final;
+            let clWinner = null;
+            if (final && final.sh !== null && final.sh !== undefined) {
+              const winId = (final.sh > final.sa) ? final.hId : (final.sa > final.sh) ? final.aId : (((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId);
+              clWinner = finishedC1.teams?.find((t: any) => t.id === winId);
+            }
+            archiveCompetition('C1', 1, clWinner, finishedC1);
+          }
+          next['C1'] = finishedC1;
         }
         // Asegurar conclusión de Europa League si no ha finalizado
         let c3 = next['C3'];
         if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
-          next['C3'] = simulateEntireCupToFinish(c3);
+          const finishedC3 = simulateEntireCupToFinish(c3, 'C3');
+          if (finishedC3.showWinner || finishedC3.phase === 'Terminado') {
+            const final = finishedC3.bracket?.Final?.[0] || finishedC3.bracket?.Final;
+            let uelWinner = null;
+            if (final && final.sh !== null && final.sh !== undefined) {
+              const winId = (final.sh > final.sa) ? final.hId : (final.sa > final.sh) ? final.aId : (((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId);
+              uelWinner = finishedC3.teams?.find((t: any) => t.id === winId);
+            }
+            archiveCompetition('C3', 1, uelWinner, finishedC3);
+          }
+          next['C3'] = finishedC3;
         }
         return next;
       });
@@ -5044,6 +5131,8 @@ function DiceFootballApp() {
         {showChampionsHistory && (
           <ChampionsHistoryModal
             championsHistory={(isLeague ? (isDiv2 ? activeComp?.championsHistory2 : activeComp?.championsHistory) : activeComp?.championsHistory) || []}
+            archive={archive}
+            comps={comps}
             title={`Palmarés · ${activeComp?.name || 'Competición'}${isLeague ? ` · ${isDiv2 ? '2ª' : '1ª'} Div.` : ''}`}
             compId={activeCompId}
             div={isLeague && isDiv2 ? 2 : 1}
@@ -6855,7 +6944,7 @@ function DiceFootballApp() {
             </motion.div>
           )}
           {view === 'rules' && <motion.div key='rules' className='flex-grow flex flex-col' initial={{ x: 300, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -300, opacity: 0 }}><RulesView setView={setView} /></motion.div>}
-          {view === 'archive' && <motion.div key='archive' className='flex-grow flex flex-col' initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}><ArchiveView selectedArchiveEntry={selectedArchiveEntry} setSelectedArchiveEntry={setSelectedArchiveEntry} setView={setView} archive={archive} /></motion.div>}
+          {view === 'archive' && <motion.div key='archive' className='flex-grow flex flex-col' initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}><ArchiveView selectedArchiveEntry={selectedArchiveEntry} setSelectedArchiveEntry={setSelectedArchiveEntry} setView={setView} archive={archive} comps={comps} /></motion.div>}
           {view === 'competition' && <motion.div key='comp' className='flex-grow flex flex-col' initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 1.1, opacity: 0 }}><CompetitionView /></motion.div>}
           {view === 'careerSelect' && (
             <motion.div key='careerSelect' className='flex-grow flex flex-col' initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
@@ -6923,7 +7012,17 @@ function DiceFootballApp() {
                       if (autoData) c3 = { ...next['C3'], ...autoData, id: 'C3', name: 'UEFA Europa League', type: 'cup' };
                     }
                     if (c3 && c3.teams && c3.teams.length > 0 && !c3.showWinner && c3.phase !== 'Terminado') {
-                      next['C3'] = simulateEntireCupToFinish(c3);
+                      const finishedC3 = simulateEntireCupToFinish(c3, 'C3');
+                      if (finishedC3.showWinner || finishedC3.phase === 'Terminado') {
+                        const final = finishedC3.bracket?.Final?.[0] || finishedC3.bracket?.Final;
+                        let uelWinner = null;
+                        if (final && final.sh !== null && final.sh !== undefined) {
+                          const winId = (final.sh > final.sa) ? final.hId : (final.sa > final.sh) ? final.aId : (((final.penH || 0) > (final.penA || 0)) ? final.hId : final.aId);
+                          uelWinner = finishedC3.teams?.find((t: any) => t.id === winId);
+                        }
+                        archiveCompetition('C3', 1, uelWinner, finishedC3);
+                      }
+                      next['C3'] = finishedC3;
                     }
                     return next;
                   });
